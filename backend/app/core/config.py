@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     celery_result_backend: str = ""
     celery_task_always_eager: bool = False
 
+    # 网关限流(T0.12):MVP 用进程内令牌桶,后续可换 Redis 分布式实现
+    rate_limit_enabled: bool = True
+    rate_limit_capacity: int = 120  # 桶容量(突发上限)
+    rate_limit_refill_per_sec: float = 20.0  # 每秒补充速率(稳态 QPS)
+    rate_limit_retry_after: int = 1  # 429 响应的 Retry-After 秒数
+
     @property
     def broker_url(self) -> str:
         return self.celery_broker_url or self.redis_url

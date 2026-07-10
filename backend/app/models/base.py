@@ -3,7 +3,12 @@
 from datetime import datetime
 
 from sqlalchemy import DateTime, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.types import JSON
+
+# JSONB 在 PostgreSQL 上更优;sqlite/其它方言回退到通用 JSON,保证本地测试可跑。
+JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
 
 class Base(DeclarativeBase):

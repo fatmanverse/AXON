@@ -12,14 +12,9 @@ from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import DateTime, Enum, String
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.types import JSON
 
-from app.models.base import Base, TimestampMixin
-
-# JSONB 在 PG 上更优;sqlite 回退到通用 JSON,保证本地测试可跑
-JSONVariant = JSON().with_variant(JSONB(), "postgresql")
+from app.models.base import Base, JSONVariant, TimestampMixin
 
 
 class TaskType(StrEnum):

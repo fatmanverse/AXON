@@ -22,6 +22,21 @@ config.set_main_option("sqlalchemy.url", get_settings().database_url)
 target_metadata = Base.metadata
 
 
+def render_item(type_, obj, autogen_context):
+    """修正 autogenerate 对 JSONB 的渲染:默认会产出未命名空间的 `Text()`,
+    导致迁移文件 import 缺失、在 PG 上执行报错。这里只渲染 JSONB 本身(带 sa.Text()
+    与 import),外层的 `JSON().with_variant(...)` 仍交给 alembic 默认逻辑包裹,
+    避免二次包裹。返回 False 走默认渲染。
+    """
+    from sqlalchemy.dialects import postgresql
+
+    if type_ == "type" and isinstance(obj, postgresql.JSONB):
+        autogen_context.imports.add("import sqlalchemy as sa")
+        autogen_context.imports.add("from sqlalchemy.dialects import postgresql")
+        return "postgresql.JSONB(astext_type=sa.Text())"
+    return False
+
+
 def run_migrations_offline() -> None:
     """离线模式:仅按 URL 生成 SQL,不建立连接。"""
     url = config.get_main_option("sqlalchemy.url")
@@ -31,6 +46,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
+        render_item=render_item,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -42,6 +58,7 @@ def do_run_migrations(connection: Connection) -> None:
         target_metadata=target_metadata,
         compare_type=True,
         render_as_batch=connection.dialect.name == "sqlite",
+        render_item=render_item,
     )
     with context.begin_transaction():
         context.run_migrations()
