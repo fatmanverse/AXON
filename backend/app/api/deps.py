@@ -29,6 +29,27 @@ async def get_session(
         yield session
 
 
+def get_secret_store(request: Request):
+    """凭证保险箱(在 lifespan 构造,存于 app.state)。"""
+    return request.app.state.secret_store
+
+
+def get_ssh_connector(request: Request):
+    """SSH 连接工厂;默认 None(由 SSHExecutor 回退到 asyncssh),测试可覆盖。"""
+    return getattr(request.app.state, "ssh_connector", None)
+
+
+def get_prometheus_http_client(request: Request):
+    """Prometheus HTTP 客户端;默认 None(由 PrometheusClient 回退到 httpx),测试可覆盖。"""
+    return getattr(request.app.state, "prometheus_http_client", None)
+
+
+def get_pipeline_adapter_provider(request: Request):
+    """CI 适配器工厂:入参 service、返回 PipelineAdapter;默认 None(MVP 未配置 CI 时
+    部署会明确落 failed),测试可经 app.state.pipeline_adapter_provider 覆写。"""
+    return getattr(request.app.state, "pipeline_adapter_provider", None)
+
+
 async def get_current_claims(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     settings: Settings = Depends(get_settings),

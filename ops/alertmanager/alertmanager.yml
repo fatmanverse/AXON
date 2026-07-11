@@ -1,0 +1,18 @@
+# Alertmanager 基础配置(T0.8 / 为 Epic 3 告警联动预留)。
+# webhook 指向控制面 /api/webhooks/alert(T3.10 落地),此处先接通默认路由。
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: control-plane
+  group_by: ["alertname", "service"]
+  group_wait: 10s
+  group_interval: 30s
+  repeat_interval: 4h
+
+receivers:
+  - name: control-plane
+    webhook_configs:
+      # 容器内经服务名访问后端;Epic 3 接收端就绪前该端点返回 404 属预期
+      - url: http://api:8000/api/webhooks/alert
+        send_resolved: true

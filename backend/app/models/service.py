@@ -1,0 +1,99 @@
+"""services 与 service_placements 模型(§14.2)。"""
+
+import uuid
+from datetime import datetime
+from enum import StrEnum
+from typing import Any
+
+from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.models.base import Base, JSONVariant, TimestampMixin
+
+
+def _enum_values(enum_cls: type[StrEnum]) -> list[str]:
+    return [item.value for item in enum_cls]
+
+
+def _uuid() -> str:
+    return uuid.uuid4().hex
+
+
+class ServiceEnvironment(StrEnum):
+    DEV = "dev"
+    STAGING = "staging"
+    PROD = "prod"
+
+
+class Runtime(StrEnum):
+    K8S = "k8s"
+    DOCKER = "docker"
+    SYSTEMD = "systemd"
+    PROCESS = "process"
+    CLOUD_FN = "cloud-fn"
+
+
+class ReloadMode(StrEnum):
+    RELOAD = "reload"
+    RESTART = "restart"
+
+
+class ObservedStatus(StrEnum):
+    RUNNING = "running"
+    STOPPED = "stopped"
+    ERROR = "error"
+    UNKNOWN = "unknown"
+
+
+class Service(Base, TimestampMixin):
+    __tablename__ = "services"
+    __table_args__ = (UniqueConstraint("name", "env", name="uq_services_name_env"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    env: Mapped[ServiceEnvironment] = mapped_column(
+        Enum(ServiceEnvironment, name="service_environment", values_callable=_enum_values),
+        nullable=False,
+        index=True,
+    )
+    runtime: Mapped[Runtime] = mapped_column(
+        Enum(Runtime, name="service_runtime", values_callable=_enum_values),
+        nullable=False,
+        index=True,
+    )
+    runtime_ref: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False)
+    desired_version: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    current_deployment_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    reload_mode: Mapped[ReloadMode] = mapped_column(
+        Enum(ReloadMode, name="service_reload_mode", values_callable=_enum_values),
+        nullable=False,
+        default=ReloadMode.RESTART,
+    )
+    health_check: Mapped[dict[str, Any] | None] = mapped_column(JSONVariant, nullable=True)
+    placements: Mapped[list["ServicePlacement"]] = relationship(
+        back_populates="service", cascade="all, delete-orphan"
+    )
+
+
+class ServicePlacement(Base):
+    __tablename__ = "service_placements"
+    __table_args__ = (
+        UniqueConstraint("service_id", "server_id", name="uq_service_placements_service_server"),
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    service_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("services.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    server_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("servers.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    observed_version: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    observed_status: Mapped[ObservedStatus] = mapped_column(
+        Enum(ObservedStatus, name="placement_observed_status", values_callable=_enum_values),
+        nullable=False,
+        default=ObservedStatus.UNKNOWN,
+        index=True,
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    service: Mapped[Service] = relationship(back_populates="placements")

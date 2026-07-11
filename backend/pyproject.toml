@@ -19,6 +19,7 @@ dependencies = [
     "hvac>=2.3",
     "pyjwt>=2.10",
     "argon2-cffi>=23.1",
+    "asyncssh>=2.24.0",
 ]
 
 [dependency-groups]

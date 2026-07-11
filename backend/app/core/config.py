@@ -58,6 +58,40 @@ class Settings(BaseSettings):
     rate_limit_refill_per_sec: float = 20.0  # 每秒补充速率(稳态 QPS)
     rate_limit_retry_after: int = 1  # 429 响应的 Retry-After 秒数
 
+    # 服务状态采集(T1.12):SSH 轮询补齐间隔(秒);Agent 接入后由心跳取代(§6.1)
+    status_collect_interval_sec: float = 30.0
+
+    # 监控自举(T1.13):node_exporter 版本/端口 + Prometheus file_sd 目标文件路径
+    node_exporter_version: str = "1.8.2"
+    node_exporter_port: int = 9100
+    prometheus_targets_file: str = "/etc/prometheus/targets/nodes.json"
+
+    # Prometheus 查询代理(T1.14):控制面屏蔽直连,前端只经此端点取指标(§15.4)
+    prometheus_base_url: str = "http://prometheus:9090"
+    prometheus_query_timeout_sec: float = 10.0
+    # PromQL 白名单前缀:只放行主机资源族指标,拦截任意指标探测(§15.4)
+    metrics_allowed_prefixes: list[str] = [
+        "up",
+        "node_cpu_seconds_total",
+        "node_memory_",
+        "node_filesystem_",
+        "node_disk_",
+        "node_network_",
+        "node_load",
+    ]
+    metrics_max_query_len: int = 2000
+
+    # 入向 webhook(T2.4,§8.3):每个上报源(CI project / scanner)独立 HMAC secret,
+    # 键为源标识(X-Webhook-Source 头),值为该源 secret(轮转期可用逗号分隔双 secret)。
+    # 生产由环境注入 YIMAI_WEBHOOK_SECRETS='{"gitlab-prod":"s1,s2"}';MVP 缺省为空,
+    # 无匹配源即拒绝。时间窗防重放(秒)。
+    webhook_secrets: dict[str, str] = {}
+    webhook_timestamp_window_sec: int = 300
+    # 部署质量门禁(§7.2):存在 critical 漏洞则拦截部署
+    deploy_block_on_critical: bool = True
+    # 告警触发自动回滚(§11.2):默认关闭,改变生产状态须显式开启
+    auto_rollback_on_alert: bool = False
+
     @property
     def broker_url(self) -> str:
         return self.celery_broker_url or self.redis_url

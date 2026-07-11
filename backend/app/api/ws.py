@@ -34,9 +34,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         await websocket.close(code=WS_POLICY_VIOLATION)
         return
     try:
-        decode_access_token(
-            token, secret=settings.jwt_secret, algorithm=settings.jwt_algorithm
-        )
+        decode_access_token(token, secret=settings.jwt_secret, algorithm=settings.jwt_algorithm)
     except InvalidTokenError:
         await websocket.close(code=WS_POLICY_VIOLATION)
         return
@@ -91,9 +89,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     await _remove_subscription(topic)
                     await websocket.send_json({"type": "unsubscribed", "topic": topic})
             else:
-                await websocket.send_json(
-                    {"type": "error", "message": f"未知指令: {action}"}
-                )
+                await websocket.send_json({"type": "error", "message": f"未知指令: {action}"})
     except WebSocketDisconnect:
         pass
     finally:

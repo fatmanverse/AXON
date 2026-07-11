@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import auth, health, ws
+from app.api import auth, health, metrics, servers, services, tasks, webhooks, ws
 from app.core.config import Settings, get_settings
 from app.core.db import Database
 from app.core.errors import register_exception_handlers
@@ -15,6 +15,7 @@ from app.core.middleware import (
     SecurityHeadersMiddleware,
 )
 from app.core.ratelimit import RateLimiter
+from app.core.secrets import build_secret_store
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -29,6 +30,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             pool_size=settings.db_pool_size,
         )
         app.state.db = database
+        app.state.secret_store = build_secret_store(settings)
+        # SSH 连接工厂:默认用 asyncssh.connect;测试可覆写 app.state.ssh_connector
+        if not hasattr(app.state, "ssh_connector"):
+            app.state.ssh_connector = None
 
         async def _db_probe() -> None:
             if not await database.ping():
@@ -66,6 +71,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app)
     app.include_router(health.router)
     app.include_router(auth.router)
+    app.include_router(servers.router)
+    app.include_router(services.router)
+    app.include_router(tasks.router)
+    app.include_router(metrics.router)
+    app.include_router(webhooks.router)
     app.include_router(ws.router)
 
     return app

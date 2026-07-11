@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 176 32" fill="none" role="img" aria-label="一脉 Axon 统一运维控制面">
+  <!-- 侧边栏锁定组合：深墨蓝灰底(#2F4050)专用。图标 + 中文主字 + 英文副字 -->
+  <g transform="translate(0,0)">
+    <g stroke="#A7B1C2" stroke-width="1.6" stroke-linecap="round">
+      <line x1="13.7" y1="13.2" x2="24" y2="7"/>
+      <line x1="14.5" y1="16" x2="26" y2="16"/>
+      <line x1="13.7" y1="18.8" x2="24" y2="25"/>
+    </g>
+    <g fill="#A7B1C2">
+      <circle cx="24" cy="7" r="2.2"/>
+      <circle cx="26" cy="16" r="2.2"/>
+      <circle cx="24" cy="25" r="2.2"/>
+    </g>
+    <circle cx="9" cy="16" r="5" fill="none" stroke="#1AB394" stroke-width="2"/>
+    <circle cx="9" cy="16" r="1.7" fill="#1AB394"/>
+  </g>
+  <text x="40" y="17" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="15" font-weight="600" fill="#FFFFFF" letter-spacing="2">一脉</text>
+  <text x="40" y="28" font-family="-apple-system,'Segoe UI',sans-serif" font-size="8" font-weight="500" fill="#A7B1C2" letter-spacing="3">AXON</text>
+</svg>

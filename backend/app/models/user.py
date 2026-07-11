@@ -53,9 +53,7 @@ class Role(Base, TimestampMixin):
 
 class RolePermission(Base):
     __tablename__ = "role_permissions"
-    __table_args__ = (
-        UniqueConstraint("role_id", "permission", name="uq_role_permission"),
-    )
+    __table_args__ = (UniqueConstraint("role_id", "permission", name="uq_role_permission"),)
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     role_id: Mapped[str] = mapped_column(

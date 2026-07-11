@@ -1,0 +1,50 @@
+# 一脉 Axon —— 主机资源告警规则(T1.15,§6.3 告警联动基线)
+# 基于 node_exporter 指标;触发后经 Alertmanager webhook 回调控制面
+# /api/webhooks/alert(Epic 3 T3.10 落地)。阈值为通用默认,按环境再调。
+
+groups:
+  - name: node-basic
+    rules:
+      # 实例失联:node_exporter 抓取不到,判定主机/exporter 宕。
+      - alert: NodeDown
+        expr: up{job="node"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "节点 {{ $labels.instance }} 失联"
+          description: "Prometheus 已连续 1 分钟抓取不到 {{ $labels.instance }} 的 node_exporter。"
+
+      # CPU 使用率高:非 idle 时间占比。5m 均值超 85% 持续 10m。
+      - alert: HighCpuUsage
+        expr: >
+          100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "节点 {{ $labels.instance }} CPU 使用率过高"
+          description: "{{ $labels.instance }} CPU 使用率持续 10 分钟高于 85%(当前 {{ printf \"%.1f\" $value }}%)。"
+
+      # 内存可用率低:可用内存占比低于 10% 持续 10m。
+      - alert: LowMemoryAvailable
+        expr: >
+          node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100 < 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "节点 {{ $labels.instance }} 可用内存过低"
+          description: "{{ $labels.instance }} 可用内存持续 10 分钟低于 10%(当前 {{ printf \"%.1f\" $value }}%)。"
+
+      # 根分区磁盘将满:可用空间低于 10% 持续 10m。
+      - alert: LowDiskSpace
+        expr: >
+          node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+          / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} * 100 < 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "节点 {{ $labels.instance }} 根分区磁盘将满"
+          description: "{{ $labels.instance }} 根分区可用空间持续 10 分钟低于 10%(当前 {{ printf \"%.1f\" $value }}%)。"

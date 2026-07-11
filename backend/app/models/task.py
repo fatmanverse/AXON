@@ -42,9 +42,7 @@ _TERMINAL: frozenset[TaskStatus] = frozenset({TaskStatus.SUCCESS, TaskStatus.FAI
 
 _ALLOWED: dict[TaskStatus, frozenset[TaskStatus]] = {
     TaskStatus.PENDING: frozenset({TaskStatus.RUNNING}),
-    TaskStatus.RUNNING: frozenset(
-        {TaskStatus.SUCCESS, TaskStatus.FAILED, TaskStatus.UNKNOWN}
-    ),
+    TaskStatus.RUNNING: frozenset({TaskStatus.SUCCESS, TaskStatus.FAILED, TaskStatus.UNKNOWN}),
     TaskStatus.UNKNOWN: frozenset({TaskStatus.SUCCESS, TaskStatus.FAILED}),
     TaskStatus.SUCCESS: frozenset(),
     TaskStatus.FAILED: frozenset(),

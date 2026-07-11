@@ -1,0 +1,27 @@
+# 一脉 Axon —— Prometheus 抓取配置(T0.8 基线,T1.13/T1.15 继续完善)
+# node_exporter 目标用 file_sd 动态维护:纳管机自举后写入 targets/ 下的文件。
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+# 告警规则:主机资源基础告警,触发后经 Alertmanager 回调控制面(§6.3 / Epic 3)
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # 纳管节点的 node_exporter:由控制面写 file_sd(§6.2 / T1.13)
+  - job_name: node
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/targets/nodes.json
+        refresh_interval: 30s

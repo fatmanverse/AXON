@@ -37,9 +37,7 @@ def test_jwt_rejects_wrong_secret():
 
 
 def test_jwt_rejects_expired():
-    token = create_access_token(
-        subject="a", secret=_SECRET, roles=[], expires_minutes=-1  # 已过期
-    )
+    token = create_access_token(subject="a", secret=_SECRET, roles=[], expires_minutes=-1)  # 已过期
     time.sleep(0.01)
     with pytest.raises(Exception):  # noqa: B017 ExpiredSignatureError
         decode_access_token(token, secret=_SECRET)

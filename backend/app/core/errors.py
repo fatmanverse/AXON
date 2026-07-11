@@ -5,6 +5,7 @@ AppError 是所有可预期业务错误的基类,携带机器可读 code 与用�
 """
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -47,7 +48,10 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def _handle_validation(_: Request, exc: RequestValidationError) -> JSONResponse:
-        return _envelope(422, "validation_error", "请求参数校验失败", exc.errors())
+        # Pydantic v2 的 errors() 在 ctx 里可能带原始异常对象(如 ValueError),
+        # 不可 JSON 序列化。用 jsonable_encoder 兜底,并剔除无法编码的字段。
+        safe_errors = jsonable_encoder(exc.errors(), custom_encoder={Exception: str})
+        return _envelope(422, "validation_error", "请求参数校验失败", safe_errors)
 
     @app.exception_handler(StarletteHTTPException)
     async def _handle_http(_: Request, exc: StarletteHTTPException) -> JSONResponse:

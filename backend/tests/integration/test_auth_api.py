@@ -81,9 +81,7 @@ async def test_unauthenticated_request_401(app_client):
 async def test_admin_can_prod_delete(app_client):
     client, _ = app_client
     token = (await _login(client, "admin", "admin-pw")).json()["data"]["access_token"]
-    resp = await client.delete(
-        "/_probe/prod-delete", headers={"Authorization": f"Bearer {token}"}
-    )
+    resp = await client.delete("/_probe/prod-delete", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
 
 
@@ -91,7 +89,5 @@ async def test_admin_can_prod_delete(app_client):
 async def test_developer_forbidden_prod_delete_403(app_client):
     client, _ = app_client
     token = (await _login(client, "dev", "dev-pw")).json()["data"]["access_token"]
-    resp = await client.delete(
-        "/_probe/prod-delete", headers={"Authorization": f"Bearer {token}"}
-    )
+    resp = await client.delete("/_probe/prod-delete", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 403

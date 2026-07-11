@@ -1,0 +1,155 @@
+# 一脉 Axon 统一运维控制面 —— 本地全栈编排(T0.8)
+# 一键拉起:postgres / redis / 后端(api+worker+beat+flower)/ 前端 /
+# prometheus / grafana / alertmanager。生产部署另行裁剪,勿直接用于线上。
+
+# 显式项目名:仓库目录名含中文,compose 无法从目录推导,须固定
+name: yimai-axon
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-yimai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yimai}
+      POSTGRES_DB: ${POSTGRES_DB:-yimai}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-yimai} -d ${POSTGRES_DB:-yimai}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # 迁移先跑一次,API/worker 依赖其成功完成再启动,避免竞态建表
+  migrate:
+    build:
+      context: ./backend
+    environment:
+      YIMAI_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-yimai}:${POSTGRES_PASSWORD:-yimai}@postgres:5432/${POSTGRES_DB:-yimai}
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: ./backend
+    environment:
+      YIMAI_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-yimai}:${POSTGRES_PASSWORD:-yimai}@postgres:5432/${POSTGRES_DB:-yimai}
+      YIMAI_REDIS_URL: redis://redis:6379/0
+      YIMAI_JWT_SECRET: ${YIMAI_JWT_SECRET:-change-me-in-prod-please-32bytes-min}
+      YIMAI_SECRET_MASTER_KEY: ${YIMAI_SECRET_MASTER_KEY:-}
+      YIMAI_LOG_JSON: "true"
+      YIMAI_PROMETHEUS_BASE_URL: http://prometheus:9090
+      # node_exporter 自举写 file_sd 的目标文件(T1.13);与 prometheus 共享同一挂载
+      YIMAI_PROMETHEUS_TARGETS_FILE: /etc/prometheus/targets/nodes.json
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      # 控制面写 file_sd 目标,prometheus 只读消费(见 prometheus 服务挂载)
+      - ./ops/prometheus/targets:/etc/prometheus/targets
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command:
+      ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  worker:
+    build:
+      context: ./backend
+    environment:
+      YIMAI_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-yimai}:${POSTGRES_PASSWORD:-yimai}@postgres:5432/${POSTGRES_DB:-yimai}
+      YIMAI_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info"]
+
+  beat:
+    build:
+      context: ./backend
+    environment:
+      YIMAI_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-yimai}:${POSTGRES_PASSWORD:-yimai}@postgres:5432/${POSTGRES_DB:-yimai}
+      YIMAI_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["celery", "-A", "app.workers.celery_app", "beat", "--loglevel=info"]
+
+  flower:
+    build:
+      context: ./backend
+    environment:
+      YIMAI_REDIS_URL: redis://redis:6379/0
+    ports:
+      - "${FLOWER_PORT:-5555}:5555"
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["celery", "-A", "app.workers.celery_app", "flower", "--port=5555"]
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      - api
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./ops/prometheus/targets:/etc/prometheus/targets:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    volumes:
+      - ./ops/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "${ALERTMANAGER_PORT:-9093}:9093"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:

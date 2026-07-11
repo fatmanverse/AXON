@@ -48,12 +48,15 @@ async def test_record_persists_all_fields(db):
 async def test_search_by_target_and_env(db):
     async with db.session() as session:
         audit = AuditService(session)
-        await audit.record(actor="a", action="deploy", target="svc:web", env="prod",
-                           result=AuditResult.SUCCESS)
-        await audit.record(actor="b", action="deploy", target="svc:web", env="dev",
-                           result=AuditResult.SUCCESS)
-        await audit.record(actor="c", action="restart", target="svc:api", env="prod",
-                           result=AuditResult.FAILED)
+        await audit.record(
+            actor="a", action="deploy", target="svc:web", env="prod", result=AuditResult.SUCCESS
+        )
+        await audit.record(
+            actor="b", action="deploy", target="svc:web", env="dev", result=AuditResult.SUCCESS
+        )
+        await audit.record(
+            actor="c", action="restart", target="svc:api", env="prod", result=AuditResult.FAILED
+        )
 
     async with db.session() as session:
         audit = AuditService(session)

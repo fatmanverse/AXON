@@ -1,0 +1,15 @@
+# 仪表盘自动置备(T0.8):从挂载目录加载 JSON 面板。
+# 基础面板在 Epic 1(T1.15)补齐,先留空目录占位。
+apiVersion: 1
+
+providers:
+  - name: default
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: true

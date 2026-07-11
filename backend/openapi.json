@@ -1,0 +1,1381 @@
+{
+  "components": {
+    "schemas": {
+      "AccessMode": {
+        "enum": [
+          "ssh",
+          "agent"
+        ],
+        "title": "AccessMode",
+        "type": "string"
+      },
+      "DeployRequestBody": {
+        "description": "UI 触发部署入参(§15.2 body:{version, strategy})。env 取自服务本身,不由前端传。",
+        "properties": {
+          "git_sha": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Sha"
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/DeploymentStrategy",
+            "default": "rolling"
+          },
+          "version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "DeployRequestBody",
+        "type": "object"
+      },
+      "DeploymentStrategy": {
+        "enum": [
+          "rolling",
+          "canary",
+          "blue-green",
+          "recreate"
+        ],
+        "title": "DeploymentStrategy",
+        "type": "string"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LoginRequest": {
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "type": "object"
+      },
+      "ReloadMode": {
+        "enum": [
+          "reload",
+          "restart"
+        ],
+        "title": "ReloadMode",
+        "type": "string"
+      },
+      "Runtime": {
+        "enum": [
+          "k8s",
+          "docker",
+          "systemd",
+          "process",
+          "cloud-fn"
+        ],
+        "title": "Runtime",
+        "type": "string"
+      },
+      "ServerRegisterRequest": {
+        "description": "纳管 API 入参(§3.2)。\n\n与 ServerCreate 的区别:SSH 模式收**私钥明文**（ssh_private_key）而非\ncredential_id——私钥由 API 层存入保险箱换取 credential_id，绝不落业务表（§13）。",
+        "properties": {
+          "access_mode": {
+            "$ref": "#/components/schemas/AccessMode"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "host": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Host",
+            "type": "string"
+          },
+          "labels": {
+            "additionalProperties": true,
+            "title": "Labels",
+            "type": "object"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "ssh_port": {
+            "default": 22,
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Ssh Port",
+            "type": "integer"
+          },
+          "ssh_private_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ssh Private Key"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "name",
+          "host",
+          "access_mode"
+        ],
+        "title": "ServerRegisterRequest",
+        "type": "object"
+      },
+      "ServiceCreate": {
+        "properties": {
+          "desired_version": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desired Version"
+          },
+          "env": {
+            "$ref": "#/components/schemas/ServiceEnvironment"
+          },
+          "health_check": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Check"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "reload_mode": {
+            "$ref": "#/components/schemas/ReloadMode",
+            "default": "restart"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/Runtime"
+          },
+          "runtime_ref": {
+            "additionalProperties": true,
+            "minProperties": 1,
+            "title": "Runtime Ref",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "env",
+          "runtime",
+          "runtime_ref"
+        ],
+        "title": "ServiceCreate",
+        "type": "object"
+      },
+      "ServiceEnvironment": {
+        "enum": [
+          "dev",
+          "staging",
+          "prod"
+        ],
+        "title": "ServiceEnvironment",
+        "type": "string"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "一脉 Axon 控制面",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Login Api Auth Login Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "operationId": "me_api_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Me Api Auth Me Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Me",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/metrics/query": {
+      "get": {
+        "operationId": "query_api_metrics_query_get",
+        "parameters": [
+          {
+            "description": "PromQL 即时查询",
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "description": "PromQL 即时查询",
+              "title": "Query",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Query Api Metrics Query Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Query",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/api/metrics/query_range": {
+      "get": {
+        "operationId": "query_range_api_metrics_query_range_get",
+        "parameters": [
+          {
+            "description": "PromQL 区间查询",
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "description": "PromQL 区间查询",
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "description": "起始 Unix 时间戳(秒)",
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "description": "起始 Unix 时间戳(秒)",
+              "title": "Start",
+              "type": "number"
+            }
+          },
+          {
+            "description": "结束 Unix 时间戳(秒)",
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "description": "结束 Unix 时间戳(秒)",
+              "title": "End",
+              "type": "number"
+            }
+          },
+          {
+            "description": "步长(秒)",
+            "in": "query",
+            "name": "step",
+            "required": true,
+            "schema": {
+              "description": "步长(秒)",
+              "exclusiveMinimum": 0,
+              "title": "Step",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Query Range Api Metrics Query Range Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Query Range",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/api/servers": {
+      "get": {
+        "operationId": "list_servers_api_servers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Servers Api Servers Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Servers",
+        "tags": [
+          "servers"
+        ]
+      },
+      "post": {
+        "operationId": "register_server_api_servers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServerRegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Register Server Api Servers Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Register Server",
+        "tags": [
+          "servers"
+        ]
+      }
+    },
+    "/api/servers/{server_id}": {
+      "delete": {
+        "operationId": "delete_server_api_servers__server_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Server Api Servers  Server Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Server",
+        "tags": [
+          "servers"
+        ]
+      }
+    },
+    "/api/servers/{server_id}/test-connection": {
+      "post": {
+        "operationId": "test_connection_api_servers__server_id__test_connection_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Test Connection Api Servers  Server Id  Test Connection Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Test Connection",
+        "tags": [
+          "servers"
+        ]
+      }
+    },
+    "/api/services": {
+      "get": {
+        "operationId": "list_services_api_services_get",
+        "parameters": [
+          {
+            "description": "按环境过滤",
+            "in": "query",
+            "name": "env",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ServiceEnvironment"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按环境过滤",
+              "title": "Env"
+            }
+          },
+          {
+            "description": "按运行时过滤",
+            "in": "query",
+            "name": "runtime",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Runtime"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按运行时过滤",
+              "title": "Runtime"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Services Api Services Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Services",
+        "tags": [
+          "services"
+        ]
+      },
+      "post": {
+        "operationId": "create_service_api_services_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Service Api Services Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Service",
+        "tags": [
+          "services"
+        ]
+      }
+    },
+    "/api/services/{service_id}": {
+      "delete": {
+        "operationId": "delete_service_api_services__service_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Service Api Services  Service Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Service",
+        "tags": [
+          "services"
+        ]
+      }
+    },
+    "/api/services/{service_id}/deploy": {
+      "post": {
+        "description": "UI 触发部署(§8.1 模式 A):落 deploy task 与 deployment 记录,异步调 CI。\n\n鉴权按 service.env 判 service:{env}:deploy。task 与审计在请求会话内落库\n(先于后台任务运行),后台任务另起会话跑 DeploymentService 编排。",
+        "operationId": "deploy_service_api_services__service_id__deploy_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeployRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Deploy Service Api Services  Service Id  Deploy Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Deploy Service",
+        "tags": [
+          "services"
+        ]
+      }
+    },
+    "/api/services/{service_id}/deployments": {
+      "get": {
+        "description": "服务的部署历史(最新在前),供部署页与主页 feed。",
+        "operationId": "list_deployments_api_services__service_id__deployments_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "按环境过滤",
+            "in": "query",
+            "name": "env",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ServiceEnvironment"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按环境过滤",
+              "title": "Env"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Deployments Api Services  Service Id  Deployments Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Deployments",
+        "tags": [
+          "services"
+        ]
+      }
+    },
+    "/api/services/{service_id}/deployments/{deployment_id}": {
+      "get": {
+        "description": "单次部署详情 + 按 git_sha 关联的扫描结论(§7.2/§14.8 全链路关联)。\n\n实现\"点开一次部署,看到这次上线扫描过没有、有没有高危\"。deployment 不属于\n该 service 或不存在均 404。git_sha 为空时 scans 为空列表。",
+        "operationId": "get_deployment_detail_api_services__service_id__deployments__deployment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Deployment Detail Api Services  Service Id  Deployments  Deployment Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Deployment Detail",
+        "tags": [
+          "services"
+        ]
+      }
+    },
+    "/api/services/{service_id}/restart": {
+      "post": {
+        "operationId": "restart_service_api_services__service_id__restart_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Restart Service Api Services  Service Id  Restart Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Restart Service",
+        "tags": [
+          "services"
+        ]
+      }
+    },
+    "/api/services/{service_id}/rollback": {
+      "post": {
+        "description": "一键回滚(§11.1):重部署上一版制品。与 deploy 同权限点,异步落 ROLLBACK task。",
+        "operationId": "rollback_service_api_services__service_id__rollback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rollback Service Api Services  Service Id  Rollback Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rollback Service",
+        "tags": [
+          "services"
+        ]
+      }
+    },
+    "/api/services/{service_id}/start": {
+      "post": {
+        "operationId": "start_service_api_services__service_id__start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Start Service Api Services  Service Id  Start Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start Service",
+        "tags": [
+          "services"
+        ]
+      }
+    },
+    "/api/services/{service_id}/stop": {
+      "post": {
+        "operationId": "stop_service_api_services__service_id__stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Stop Service Api Services  Service Id  Stop Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stop Service",
+        "tags": [
+          "services"
+        ]
+      }
+    },
+    "/api/tasks/{task_id}": {
+      "get": {
+        "operationId": "get_task_api_tasks__task_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Task Api Tasks  Task Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Task",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/webhooks/alert": {
+      "post": {
+        "description": "Alertmanager 告警回调(§6.3)。批量 alerts 按 fingerprint 幂等 upsert。\n\n复用 HMAC 验签。severity/service 从 labels 取,summary 从 annotations 取;\nstatus firing→FIRING、其余(resolved)→RESOLVED。startsAt/endsAt 作 fired/resolved。\n告警触发自动回滚(§11.2):critical+firing+可定位服务且开关开启时,后台触发一次\n回滚(建 ROLLBACK task + run_rollback)。安全默认关闭(settings.auto_rollback_on_alert)。",
+        "operationId": "alert_webhook_api_webhooks_alert_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Alert Webhook Api Webhooks Alert Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Alert Webhook",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/api/webhooks/deployment": {
+      "post": {
+        "operationId": "deployment_webhook_api_webhooks_deployment_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Deployment Webhook Api Webhooks Deployment Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Deployment Webhook",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/api/webhooks/scan": {
+      "post": {
+        "description": "扫描器上报扫描结果(§7.1)。复用 HMAC 验签;按 (git_sha, scanner) 幂等 upsert。",
+        "operationId": "scan_webhook_api_webhooks_scan_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Scan Webhook Api Webhooks Scan Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Scan Webhook",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/healthz": {
+      "get": {
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Healthz Healthz Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthz",
+        "tags": [
+          "health"
+        ]
+      }
+    }
+  }
+}
