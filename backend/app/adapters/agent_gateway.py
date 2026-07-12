@@ -81,7 +81,7 @@ class AgentGateway(Executor):
         command = ServerCommand(
             task_id=task_id, action=action, params=params, fence=self._fence
         )
-        future: asyncio.Future[AgentMessage] = asyncio.get_event_loop().create_future()
+        future: asyncio.Future[AgentMessage] = asyncio.get_running_loop().create_future()
         self._pending[task_id] = future
         try:
             try:
