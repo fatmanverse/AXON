@@ -106,6 +106,13 @@ class Settings(BaseSettings):
     # 生产由环境注入 YIMAI_PIPELINE_CONFIG='{"*":{"provider":"gitlab",...}}';
     # 缺省为空 → provider 恒返回 None,部署报"未配置 CI"而非 500。
     pipeline_config: dict[str, dict[str, str]] = {}
+    # Agent gRPC server(T4.1,§15.5):Agent 主动外连的监听地址。enabled 关闭时
+    # 不起 gRPC server(纯 SSH 部署,默认);开启后 Agent 可建双向流上报/收命令。
+    agent_grpc_enabled: bool = False
+    agent_grpc_host: str = "0.0.0.0"  # noqa: S104 - Agent 需从各内网机器外连,须监听全网卡
+    agent_grpc_port: int = 50051
+    # 心跳超时窗(秒):超过未收到心跳判 agent 离线,触发 §5.4 离线分档与 fencing。
+    agent_heartbeat_timeout_sec: float = 30.0
 
     @property
     def broker_url(self) -> str:

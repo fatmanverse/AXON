@@ -20,6 +20,8 @@ dependencies = [
     "pyjwt>=2.10",
     "argon2-cffi>=23.1",
     "asyncssh>=2.24.0",
+    "grpcio>=1.82.1",
+    "grpcio-tools>=1.82.1",
 ]
 
 [dependency-groups]
@@ -49,6 +51,8 @@ show_missing = true
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# protoc/grpc_tools 生成的产物不 lint(风格由生成器决定,勿手改)
+extend-exclude = ["app/grpc_gen"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "C4"]
@@ -58,6 +62,7 @@ ignore = ["B008"]
 [tool.black]
 line-length = 100
 target-version = ["py311"]
+extend-exclude = "app/grpc_gen"
 
 [build-system]
 requires = ["hatchling"]

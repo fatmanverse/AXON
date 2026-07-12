@@ -27,6 +27,8 @@ from app.core.middleware import (
 )
 from app.core.ratelimit import RateLimiter
 from app.core.secrets import build_secret_store
+from app.services.agent_connection import AgentConnectionManager
+from app.services.agent_grpc_server import AgentGrpcServer
 from app.services.pipeline_provider import build_pipeline_provider
 
 
@@ -54,6 +56,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 settings.pipeline_config, app.state.secret_store
             )
 
+        # Agent gRPC server(T4.1,§15.5):按开关起。与 AgentGateway 共享同一
+        # AgentConnectionManager(挂 app.state),命令下发与 ACK 回传才对得上。
+        # 默认关闭(纯 SSH 部署);开启后 Agent 可主动外连建双向流。
+        grpc_server: AgentGrpcServer | None = None
+        if settings.agent_grpc_enabled:
+            manager = AgentConnectionManager(
+                heartbeat_timeout=settings.agent_heartbeat_timeout_sec
+            )
+            app.state.agent_connection_manager = manager
+            grpc_server = AgentGrpcServer(
+                manager, host=settings.agent_grpc_host, port=settings.agent_grpc_port
+            )
+            await grpc_server.start()
+
         async def _db_probe() -> None:
             if not await database.ping():
                 raise RuntimeError("database unreachable")
@@ -63,6 +79,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             health.unregister_probe("database")
+            if grpc_server is not None:
+                await grpc_server.stop()
             await database.dispose()
 
     app = FastAPI(

@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+// 一脉 Axon Agent 通信协议(设计 §15.5)。
+// Agent 主动外连控制面建立双向流:上行 AgentMessage(心跳/状态/结果 ACK),
+// 下行 ServerCommand(命令下发)。task_id 是断连一致性的幂等基石(§5.4)。
+
+package yimai.agent.v1;
+
+option go_package = "github.com/yimai/axon-agent/gen/agentpb";
+
+service AgentService {
+  // Agent → 控制面:建立长连,上报心跳/状态/结果;控制面经同一流下发命令。
+  rpc Connect(stream AgentMessage) returns (stream ServerCommand);
+}
+
+// 上行:Agent → 控制面
+message AgentMessage {
+  string agent_id = 1;
+  oneof payload {
+    Heartbeat heartbeat = 2;       // 心跳:agent 版本、机器在线
+    ServiceStatus status = 3;      // 服务状态上报
+    CommandAck ack = 4;            // 命令 ACK(received / result 两段,§5.4①)
+  }
+}
+
+message Heartbeat {
+  string agent_version = 1;
+}
+
+message ServiceStatus {
+  string service_ref = 1;
+  bool running = 2;
+  string detail = 3;
+}
+
+// 命令 ACK。received=第一段(已收到),result=第二段(执行完,推进 task 终态)。
+message CommandAck {
+  string task_id = 1;
+  AckKind kind = 2;
+  bool ok = 3;         // result 段有效:执行成功与否
+  string detail = 4;   // 结果摘要 / stderr
+}
+
+enum AckKind {
+  ACK_KIND_UNSPECIFIED = 0;
+  ACK_KIND_RECEIVED = 1;   // 收到命令(第一段 ACK)
+  ACK_KIND_RESULT = 2;     // 执行结果(第二段 ACK)
+}
+
+// 下行:控制面 → Agent
+message ServerCommand {
+  string task_id = 1;      // 幂等基石(§5.4):Agent 按此去重,重连补报也按此关联
+  string action = 2;       // exec | deploy | update_config | 生命周期动作名
+  map<string, string> params = 3;
+  int64 fence = 4;         // fencing token(§5.4⑥):Agent 拒绝低于当前租约的旧命令
+}
