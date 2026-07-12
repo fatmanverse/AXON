@@ -27,6 +27,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/client";
+import { diffLines, diffSummary } from "@/api/configDiff";
 import { listServices, type Service } from "@/api/services";
 import {
   type ConfigDelivery,
@@ -61,6 +62,7 @@ function ConfigPanel({ serviceId }: { serviceId: string }): React.ReactElement {
   const [form] = Form.useForm<ConfigFormValues>();
   const [applying, setApplying] = useState<number | null>(null);
   const [deliveryVersion, setDeliveryVersion] = useState<number | null>(null);
+  const [diffVersion, setDiffVersion] = useState<number | null>(null);
 
   const { data: versions, isLoading } = useQuery({
     queryKey: ["configs", serviceId],
@@ -191,10 +193,25 @@ function ConfigPanel({ serviceId }: { serviceId: string }): React.ReactElement {
           <Button size="small" type="link" onClick={() => setDeliveryVersion(row.version)}>
             下发结果
           </Button>
+          {row.version > 1 && (
+            <Button size="small" type="link" onClick={() => setDiffVersion(row.version)}>
+              对比上一版
+            </Button>
+          )}
         </span>
       ),
     },
   ];
+
+  // 与上一版(version-1)对比:两版内容做行 diff,供 Modal 渲染
+  const diffData = (() => {
+    if (diffVersion === null || !versions) return null;
+    const cur = versions.find((v) => v.version === diffVersion);
+    const prev = versions.find((v) => v.version === diffVersion - 1);
+    if (!cur || !prev) return null;
+    const lines = diffLines(prev.content, cur.content);
+    return { lines, summary: diffSummary(lines), from: prev.version, to: cur.version };
+  })();
 
   const deliveryColumns: ColumnsType<ConfigDelivery> = [
     { title: "放置点", dataIndex: "placement_id", key: "placement_id", width: 240 },
@@ -306,6 +323,50 @@ function ConfigPanel({ serviceId }: { serviceId: string }): React.ReactElement {
             locale={{ emptyText: "该版本尚无下发记录" }}
             bordered
           />
+        )}
+      </Modal>
+      <Modal
+        title={
+          diffData
+            ? `配置对比 v${diffData.from} → v${diffData.to}(+${diffData.summary.added} -${diffData.summary.removed})`
+            : "配置对比"
+        }
+        open={diffVersion !== null}
+        onCancel={() => setDiffVersion(null)}
+        footer={null}
+        width={720}
+      >
+        {diffData ? (
+          <div
+            style={{
+              fontFamily: "monospace",
+              fontSize: 12,
+              lineHeight: 1.6,
+              maxHeight: 480,
+              overflow: "auto",
+              border: `1px solid ${colors.cardBorder}`,
+              borderRadius: 4,
+            }}
+          >
+            {diffData.lines.map((line, idx) => {
+              const style =
+                line.kind === "added"
+                  ? { background: "#F6FFED", color: "#237804" }
+                  : line.kind === "removed"
+                    ? { background: "#FFF1F0", color: "#A8071A" }
+                    : { color: colors.textBody };
+              const prefix =
+                line.kind === "added" ? "+ " : line.kind === "removed" ? "- " : "  ";
+              return (
+                <div key={idx} style={{ ...style, padding: "0 8px", whiteSpace: "pre-wrap" }}>
+                  {prefix}
+                  {line.text || " "}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <Empty description="无法对比(缺少相邻版本)" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         )}
       </Modal>
     </div>
