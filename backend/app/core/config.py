@@ -101,6 +101,11 @@ class Settings(BaseSettings):
     # 通知触达(§13):IM 自定义机器人 webhook URL(钉钉/飞书/企微/Slack)。
     # 留空则不通知(NoopNotifier)。firing 告警到达时推送;后续可扩展关键操作通知。
     notify_webhook_url: str = ""
+    # CI pipeline 生产配置(T2.7,§8.1):按 service.name 构造 Jenkins/GitLab adapter。
+    # 键为 service 名(或 "*" 默认),值含 provider/base_url/token 保险箱 id 等。
+    # 生产由环境注入 YIMAI_PIPELINE_CONFIG='{"*":{"provider":"gitlab",...}}';
+    # 缺省为空 → provider 恒返回 None,部署报"未配置 CI"而非 500。
+    pipeline_config: dict[str, dict[str, str]] = {}
 
     @property
     def broker_url(self) -> str:

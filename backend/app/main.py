@@ -27,6 +27,7 @@ from app.core.middleware import (
 )
 from app.core.ratelimit import RateLimiter
 from app.core.secrets import build_secret_store
+from app.services.pipeline_provider import build_pipeline_provider
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -45,6 +46,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # SSH 连接工厂:默认用 asyncssh.connect;测试可覆写 app.state.ssh_connector
         if not hasattr(app.state, "ssh_connector"):
             app.state.ssh_connector = None
+        # CI pipeline provider 生产装配(T2.7):按 settings.pipeline_config 构造 Jenkins/
+        # GitLab adapter;配置为空则 provider 恒返回 None(部署报"未配置 CI",不 500)。
+        # 测试可预置 app.state.pipeline_adapter_provider 覆写为 fake,故仅在未设置时装。
+        if not hasattr(app.state, "pipeline_adapter_provider"):
+            app.state.pipeline_adapter_provider = build_pipeline_provider(
+                settings.pipeline_config, app.state.secret_store
+            )
 
         async def _db_probe() -> None:
             if not await database.ping():
