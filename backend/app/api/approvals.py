@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import (
     get_current_user,
     get_database,
+    get_health_checker,
     get_pipeline_adapter_provider,
     get_session,
 )
@@ -35,8 +36,7 @@ from app.schemas.approval import ApprovalDecision, ApprovalOut
 from app.services.approval_repository import ApprovalRepository
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
-from app.services.deployment_service import DeployRequest, DeploymentService
-from app.services.service_repository import ServiceRepository
+from app.services.deployment_service import DeploymentService, DeployRequest
 from app.services.task_repository import TaskRepository
 
 router = APIRouter(prefix="/api/approvals", tags=["approvals"])
@@ -72,6 +72,7 @@ async def approve(
     session: AsyncSession = Depends(get_session),
     db: Database = Depends(get_database),
     provider=Depends(get_pipeline_adapter_provider),
+    health_checker=Depends(get_health_checker),
     user: User = Depends(get_current_user),
 ) -> dict:
     """批准一条待审批的高危操作,建 task 执行原动作(当前支持 deploy)。
@@ -93,7 +94,6 @@ async def approve(
     if provider is None:
         raise AppError("pipeline_not_configured", "未配置 CI 流水线,无法执行部署", status_code=501)
 
-    service = await ServiceRepository(session).get_service(approval.service_id)
     payload = approval.payload or {}
     version = payload.get("version", "")
     strategy = DeploymentStrategy(payload.get("strategy", DeploymentStrategy.ROLLING.value))
@@ -106,7 +106,9 @@ async def approve(
         created_by=user.username,
     )
     task_id = task.id
-    await ApprovalRepository(session).approve(approval_id, decided_by=user.username, task_id=task_id)
+    await ApprovalRepository(session).approve(
+        approval_id, decided_by=user.username, task_id=task_id
+    )
     await AuditService(session).record(
         actor=user.username,
         action="service.deploy.approved",
@@ -119,7 +121,9 @@ async def approve(
         ua=request.headers.get("user-agent"),
     )
 
-    deployer = DeploymentService(db, adapter_provider=provider)
+    deployer = DeploymentService(
+        db, adapter_provider=provider, health_checker=health_checker
+    )
     background.add_task(
         deployer.run_deploy,
         task_id=task_id,

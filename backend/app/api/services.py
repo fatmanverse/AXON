@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import (
     get_current_user,
     get_database,
+    get_health_checker,
     get_pipeline_adapter_provider,
     get_secret_store,
     get_session,
@@ -288,6 +289,7 @@ async def _start_deploy(
     db: Database,
     provider,
     operator: str,
+    health_checker=None,
 ) -> str:
     """建 deploy task + 写审计 + 调度异步部署编排,返回 task_id。
 
@@ -311,7 +313,7 @@ async def _start_deploy(
         ip=request.client.host if request.client else None,
         ua=request.headers.get("user-agent"),
     )
-    deployer = DeploymentService(db, adapter_provider=provider)
+    deployer = DeploymentService(db, adapter_provider=provider, health_checker=health_checker)
     background.add_task(
         deployer.run_deploy,
         task_id=task_id,
@@ -331,6 +333,7 @@ async def deploy_service(
     session: AsyncSession = Depends(get_session),
     db: Database = Depends(get_database),
     provider=Depends(get_pipeline_adapter_provider),
+    health_checker=Depends(get_health_checker),
     user: User = Depends(get_current_user),
 ) -> dict:
     """UI 触发部署(§8.1 模式 A):落 deploy task 与 deployment 记录,异步调 CI。
@@ -393,6 +396,7 @@ async def deploy_service(
         db=db,
         provider=provider,
         operator=user.username,
+        health_checker=health_checker,
     )
     accepted = TaskAccepted(task_id=task_id, status=TaskStatus.PENDING)
     return ok(accepted.model_dump())
@@ -406,6 +410,7 @@ async def rollback_service(
     session: AsyncSession = Depends(get_session),
     db: Database = Depends(get_database),
     provider=Depends(get_pipeline_adapter_provider),
+    health_checker=Depends(get_health_checker),
     user: User = Depends(get_current_user),
 ) -> dict:
     """一键回滚(§11.1):重部署上一版制品。与 deploy 同权限点,异步落 ROLLBACK task。"""
@@ -432,7 +437,7 @@ async def rollback_service(
         ua=request.headers.get("user-agent"),
     )
 
-    deployer = DeploymentService(db, adapter_provider=provider)
+    deployer = DeploymentService(db, adapter_provider=provider, health_checker=health_checker)
     background.add_task(
         deployer.run_rollback,
         task_id=task_id,
@@ -453,6 +458,7 @@ async def promote_service(
     session: AsyncSession = Depends(get_session),
     db: Database = Depends(get_database),
     provider=Depends(get_pipeline_adapter_provider),
+    health_checker=Depends(get_health_checker),
     user: User = Depends(get_current_user),
 ) -> dict:
     """环境晋升(§10.3):取源服务(如 staging)最近成功部署的同一制品,在本
@@ -497,7 +503,7 @@ async def promote_service(
         ua=request.headers.get("user-agent"),
     )
 
-    deployer = DeploymentService(db, adapter_provider=provider)
+    deployer = DeploymentService(db, adapter_provider=provider, health_checker=health_checker)
     background.add_task(
         deployer.run_promotion,
         task_id=task_id,

@@ -50,6 +50,19 @@ def get_pipeline_adapter_provider(request: Request):
     return getattr(request.app.state, "pipeline_adapter_provider", None)
 
 
+def get_health_checker(request: Request):
+    """发布后健康检查器(T3.8,§11.1)。默认用 HTTP 探测的生产 prober(命令探测需
+    executor,MVP 未接则该类探测优雅失败);测试可经 app.state.health_checker 覆写。
+    注入后部署编排在 CI/策略铺开后跑健康检查,不通过则落 failed(可联动自动回滚)。"""
+    existing = getattr(request.app.state, "health_checker", None)
+    if existing is not None:
+        return existing
+    from app.services.health_checker import HealthChecker
+    from app.services.health_prober import DefaultHealthProber
+
+    return HealthChecker(prober=DefaultHealthProber())
+
+
 async def get_current_claims(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     settings: Settings = Depends(get_settings),
