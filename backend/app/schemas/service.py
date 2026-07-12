@@ -48,3 +48,10 @@ class DeployRequestBody(BaseModel):
     version: str = Field(min_length=1, max_length=128)
     strategy: DeploymentStrategy = DeploymentStrategy.ROLLING
     git_sha: str | None = Field(default=None, max_length=64)
+
+
+class PromoteRequestBody(BaseModel):
+    """环境晋升入参(§10.3):把 source_service_id(如 staging)最近一次成功部署的
+    制品晋升到当前(目标)服务。source 与目标须同名不同 env(如 billing staging→prod)。"""
+
+    source_service_id: str = Field(min_length=1, max_length=32)

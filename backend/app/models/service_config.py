@@ -38,6 +38,8 @@ class ServiceConfig(Base, TimestampMixin):
     # version 按 service 自增(仓储层保证),非全局自增
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # 下发到目标机的绝对路径(§12.2 推模式);为空则该版本不可下发(仅暂存)
+    target_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     format: Mapped[ConfigFormat] = mapped_column(
         Enum(ConfigFormat, name="service_config_format", values_callable=_enum_values),
         nullable=False,

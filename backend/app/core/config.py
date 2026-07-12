@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     # 服务状态采集(T1.12):SSH 轮询补齐间隔(秒);Agent 接入后由心跳取代(§6.1)
     status_collect_interval_sec: float = 30.0
 
+    # 部署轮询兜底(T2.7,§8.2/§8.3④):定时补齐仍卡 running 的部署(webhook 丢失时),
+    # 与 webhook 靠状态机去重。间隔(秒);0 或负数关闭。
+    deploy_reconcile_interval_sec: float = 60.0
+
     # 监控自举(T1.13):node_exporter 版本/端口 + Prometheus file_sd 目标文件路径
     node_exporter_version: str = "1.8.2"
     node_exporter_port: int = 9100
@@ -91,6 +95,12 @@ class Settings(BaseSettings):
     deploy_block_on_critical: bool = True
     # 告警触发自动回滚(§11.2):默认关闭,改变生产状态须显式开启
     auto_rollback_on_alert: bool = False
+    # 生产审批流(§10.2/§13):开启时 prod 的 deploy/delete/rollback 先落 pending 审批,
+    # 具 approve 权限者批准后才执行。默认开启——生产高危操作应有人工闸门。
+    require_prod_approval: bool = True
+    # 通知触达(§13):IM 自定义机器人 webhook URL(钉钉/飞书/企微/Slack)。
+    # 留空则不通知(NoopNotifier)。firing 告警到达时推送;后续可扩展关键操作通知。
+    notify_webhook_url: str = ""
 
     @property
     def broker_url(self) -> str:

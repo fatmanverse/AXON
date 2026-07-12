@@ -39,7 +39,20 @@ export interface ConfigVersion {
   format: ConfigFormat;
   created_by: string | null;
   comment: string | null;
+  target_path: string | null;
   is_current: boolean;
+  created_at: string;
+}
+
+export type DeliveryStatus = "pending" | "success" | "failed";
+
+export interface ConfigDelivery {
+  id: string;
+  config_id: string;
+  placement_id: string;
+  status: DeliveryStatus;
+  result: string | null;
+  error: string | null;
   created_at: string;
 }
 
@@ -71,7 +84,7 @@ export function getCurrentConfig(serviceId: string): Promise<ConfigVersion | nul
 
 export function createConfigVersion(
   serviceId: string,
-  body: { content: string; format?: ConfigFormat; comment?: string },
+  body: { content: string; format?: ConfigFormat; comment?: string; target_path?: string },
 ): Promise<ConfigVersion> {
   return api.post<ConfigVersion>(`/api/services/${serviceId}/configs`, body);
 }
@@ -81,6 +94,22 @@ export function activateConfigVersion(
   version: number,
 ): Promise<ConfigVersion> {
   return api.post<ConfigVersion>(`/api/services/${serviceId}/configs/${version}/activate`);
+}
+
+export function applyConfigVersion(
+  serviceId: string,
+  version: number,
+): Promise<TaskAccepted> {
+  return api.post<TaskAccepted>(`/api/services/${serviceId}/configs/${version}/apply`);
+}
+
+export function listConfigDeliveries(
+  serviceId: string,
+  version: number,
+): Promise<ConfigDelivery[]> {
+  return api.get<ConfigDelivery[]>(
+    `/api/services/${serviceId}/configs/${version}/deliveries`,
+  );
 }
 
 export interface ScanResult {
@@ -96,7 +125,8 @@ export interface ScanResult {
   report_url: string | null;
 }
 
-export interface DeploymentDetail extends Deployment {
+export interface DeploymentDetail {
+  deployment: Deployment;
   scans: ScanResult[];
 }
 

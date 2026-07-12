@@ -28,6 +28,11 @@ from app.services.alert_repository import AlertRepository
 from app.services.auto_rollback import should_auto_rollback
 from app.services.deployment_repository import DeploymentRepository
 from app.services.deployment_service import DeploymentService
+from app.services.notifier import (
+    NotificationMessage,
+    build_notifier,
+    format_alert_message,
+)
 from app.services.scan_result_repository import ScanResultRepository
 from app.services.service_repository import ServiceRepository
 from app.services.task_repository import TaskRepository
@@ -155,6 +160,8 @@ async def alert_webhook(request: Request, background: BackgroundTasks) -> dict:
 
     processed = 0
     rollback_targets: list[tuple[str, str]] = []  # (service_id, task_id)
+    # firing 告警的可读通知(§13 通知触达):收集后在后台推送,不阻断 webhook 响应
+    notifications: list[NotificationMessage] = []
     async with request.app.state.db.session() as session:
         repo = AlertRepository(session)
         svc_repo = ServiceRepository(session)
@@ -177,6 +184,17 @@ async def alert_webhook(request: Request, background: BackgroundTasks) -> dict:
                 resolved_at=item.endsAt if status == AlertStatus.RESOLVED else None,
             )
             processed += 1
+
+            # firing 告警收集通知(§13):resolved 不扰动值班,只对 firing 推送
+            if status == AlertStatus.FIRING:
+                notifications.append(
+                    format_alert_message(
+                        severity=severity.value,
+                        summary=item.annotations.get("summary", ""),
+                        service=service_name,
+                        status=status.value,
+                    )
+                )
 
             if should_auto_rollback(
                 severity=severity,
@@ -210,5 +228,11 @@ async def alert_webhook(request: Request, background: BackgroundTasks) -> dict:
                 service_id=service_id,
                 operator="auto-rollback",
             )
+
+    # 后台推送 firing 告警通知(§13):通知是旁路,失败不影响 webhook 已成功落库。
+    # 未配置渠道时 build_notifier 返回 NoopNotifier,notify 恒成功不发请求。
+    notifier = build_notifier(settings.notify_webhook_url)
+    for message in notifications:
+        background.add_task(notifier.notify, message)
 
     return ok({"processed": processed, "auto_rollbacks": len(rollback_targets)})

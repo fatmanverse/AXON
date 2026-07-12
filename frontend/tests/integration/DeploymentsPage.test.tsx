@@ -74,6 +74,7 @@ const CFG_V2: ConfigVersion = {
   format: "env",
   created_by: "alice",
   comment: "bump",
+  target_path: null,
   is_current: true,
   created_at: "2026-07-11T12:00:00+00:00",
 };
@@ -86,6 +87,7 @@ const CFG_V1: ConfigVersion = {
   format: "env",
   created_by: "alice",
   comment: "init",
+  target_path: null,
   is_current: false,
   created_at: "2026-07-11T11:00:00+00:00",
 };
@@ -126,58 +128,6 @@ describe("DeploymentsPage", () => {
 
     await waitFor(() => {
       expect(mock.history.post.some((r) => r.url === "/api/services/svc1/rollback")).toBe(true);
-    });
-  });
-
-  it("配置管理 tab 列出版本并标记生效中", async () => {
-    const user = userEvent.setup();
-    renderPage();
-    await screen.findByText("v1.2.0");
-
-    await user.click(screen.getByRole("tab", { name: "配置管理" }));
-
-    expect(await screen.findByText("生效中")).toBeInTheDocument();
-    // v1 有"设为生效"按钮
-    expect(screen.getByRole("button", { name: "设为生效" })).toBeInTheDocument();
-  });
-
-  it("新建配置版本提交内容与格式", async () => {
-    mock.onPost("/api/services/svc1/configs").reply((config) => {
-      const body = JSON.parse(config.data);
-      expect(body.content).toBe("KEY=val");
-      return [201, ok({ ...CFG_V2, version: 3, content: "KEY=val" })];
-    });
-
-    const user = userEvent.setup();
-    renderPage();
-    await screen.findByText("v1.2.0");
-    await user.click(screen.getByRole("tab", { name: "配置管理" }));
-
-    const textarea = await screen.findByPlaceholderText(/A=1/);
-    await user.type(textarea, "KEY=val");
-    await user.click(screen.getByRole("button", { name: /^保\s*存$|保存/ }));
-
-    await waitFor(() => {
-      expect(mock.history.post.some((r) => r.url === "/api/services/svc1/configs")).toBe(true);
-    });
-  });
-
-  it("切换生效版调用 activate 端点", async () => {
-    mock.onPost("/api/services/svc1/configs/1/activate").reply(200, ok({ ...CFG_V1, is_current: true }));
-
-    const user = userEvent.setup();
-    renderPage();
-    await screen.findByText("v1.2.0");
-    await user.click(screen.getByRole("tab", { name: "配置管理" }));
-
-    await user.click(await screen.findByRole("button", { name: "设为生效" }));
-    const confirm = await screen.findByRole("button", { name: /^切\s*换$/ });
-    await user.click(confirm);
-
-    await waitFor(() => {
-      expect(
-        mock.history.post.some((r) => r.url === "/api/services/svc1/configs/1/activate"),
-      ).toBe(true);
     });
   });
 });

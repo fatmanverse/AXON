@@ -179,3 +179,115 @@ async def test_unknown_service_marks_task_failed(db):
     assert task.status == TaskStatus.FAILED
     # 未触发 CI
     assert adapter.triggered == []
+
+
+async def test_rollout_provider_executes_strategy_after_ci(db):
+    """注入 rollout_provider 时,CI 触发成功后按策略铺开(此处 k8s rolling→rollout restart)。"""
+    from app.models.service import Runtime
+    from app.services.release_strategy import RolloutContext
+
+    async with db.session() as session:
+        service = await ServiceRepository(session).create_service(
+            ServiceCreate(
+                name="k8s-svc",
+                env=ServiceEnvironment.PROD,
+                runtime=Runtime.K8S,
+                runtime_ref={"namespace": "prod", "workload": "k8s-svc"},
+            )
+        )
+        service_id = service.id
+
+    calls: list[tuple] = []
+
+    class _FakeK8s:
+        async def restart(self, namespace: str, workload: str) -> None:
+            calls.append(("restart", namespace, workload))
+
+        async def scale(self, namespace: str, workload: str, replicas: int) -> None:
+            calls.append(("scale", namespace, workload, replicas))
+
+    def _rollout_provider(svc):
+        return RolloutContext(
+            runtime=Runtime.K8S,
+            k8s_adapter=_FakeK8s(),
+            namespace=svc.runtime_ref["namespace"],
+            workload=svc.runtime_ref["workload"],
+            replicas=2,
+        )
+
+    task_id = await _make_task(db, service_id)
+    adapter = _FakeAdapter(run_id="r1")
+    svc = DeploymentService(
+        db,
+        adapter_provider=lambda _svc: adapter,
+        rollout_provider=_rollout_provider,
+    )
+    await svc.run_deploy(
+        task_id=task_id,
+        service_id=service_id,
+        request=DeployRequest(version="v1", strategy=DeploymentStrategy.ROLLING),
+        operator="alice",
+    )
+
+    # CI 触发了,且策略铺开执行了 k8s rollout restart
+    assert adapter.triggered
+    assert calls == [("restart", "prod", "k8s-svc")]
+    async with db.session() as session:
+        task = await TaskRepository(session).get(task_id)
+    assert task.status == TaskStatus.SUCCESS
+
+
+async def test_rollout_strategy_failure_marks_deploy_failed(db):
+    """策略铺开失败(如 canary 未支持)→ deployment 与 task 落 failed。"""
+    from app.models.service import Runtime
+    from app.services.release_strategy import RolloutContext
+
+    async with db.session() as session:
+        service = await ServiceRepository(session).create_service(
+            ServiceCreate(
+                name="k8s-canary",
+                env=ServiceEnvironment.PROD,
+                runtime=Runtime.K8S,
+                runtime_ref={"namespace": "prod", "workload": "k8s-canary"},
+            )
+        )
+        service_id = service.id
+
+    class _FakeK8s:
+        async def restart(self, namespace: str, workload: str) -> None:
+            pass
+
+        async def scale(self, namespace: str, workload: str, replicas: int) -> None:
+            pass
+
+    def _rollout_provider(svc):
+        return RolloutContext(
+            runtime=Runtime.K8S,
+            k8s_adapter=_FakeK8s(),
+            namespace="prod",
+            workload="k8s-canary",
+            replicas=2,
+        )
+
+    task_id = await _make_task(db, service_id)
+    adapter = _FakeAdapter(run_id="r1")
+    svc = DeploymentService(
+        db,
+        adapter_provider=lambda _svc: adapter,
+        rollout_provider=_rollout_provider,
+    )
+    # canary 在 k8s 原生不支持 → 策略执行抛 501 → 落 failed
+    await svc.run_deploy(
+        task_id=task_id,
+        service_id=service_id,
+        request=DeployRequest(version="v1", strategy=DeploymentStrategy.CANARY),
+        operator="alice",
+    )
+
+    async with db.session() as session:
+        task = await TaskRepository(session).get(task_id)
+        deployments = await DeploymentRepository(session).list_for_service(
+            service_id, env="prod"
+        )
+    assert task.status == TaskStatus.FAILED
+    assert deployments[0].status == DeploymentStatus.FAILED

@@ -5,8 +5,10 @@
 """
 
 from app.models.alert import Alert
+from app.models.approval import Approval
 from app.models.audit import AuditLog
 from app.models.base import Base
+from app.models.config_delivery import ConfigDelivery
 from app.models.deployment import Deployment
 from app.models.scan_result import ScanResult
 from app.models.server import Server
@@ -30,4 +32,6 @@ __all__ = [
     "ScanResult",
     "Alert",
     "Deployment",
+    "ConfigDelivery",
+    "Approval",
 ]

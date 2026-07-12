@@ -9,6 +9,84 @@
         "title": "AccessMode",
         "type": "string"
       },
+      "AlertStatus": {
+        "enum": [
+          "firing",
+          "resolved"
+        ],
+        "title": "AlertStatus",
+        "type": "string"
+      },
+      "ApprovalDecision": {
+        "description": "拒绝审批的入参(reason 说明拒绝理由)。approve 无需 body。",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "ApprovalDecision",
+        "type": "object"
+      },
+      "ConfigFormat": {
+        "enum": [
+          "env",
+          "yaml",
+          "properties",
+          "json"
+        ],
+        "title": "ConfigFormat",
+        "type": "string"
+      },
+      "ConfigVersionCreate": {
+        "description": "新建配置版本入参(§15.3 暂存)。content 允许空串(占位版本)。\n\ntarget_path 是下发时写到目标机的绝对路径(§12.2);不填则该版本只能查看/diff,\napply 下发时会因缺路径而失败。",
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "content": {
+            "default": "",
+            "maxLength": 1048576,
+            "title": "Content",
+            "type": "string"
+          },
+          "format": {
+            "$ref": "#/components/schemas/ConfigFormat",
+            "default": "env"
+          },
+          "target_path": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Path"
+          }
+        },
+        "title": "ConfigVersionCreate",
+        "type": "object"
+      },
       "DeployRequestBody": {
         "description": "UI 触发部署入参(§15.2 body:{version, strategy})。env 取自服务本身,不由前端传。",
         "properties": {
@@ -84,6 +162,22 @@
           "password"
         ],
         "title": "LoginRequest",
+        "type": "object"
+      },
+      "PromoteRequestBody": {
+        "description": "环境晋升入参(§10.3):把 source_service_id(如 staging)最近一次成功部署的\n制品晋升到当前(目标)服务。source 与目标须同名不同 env(如 billing staging→prod)。",
+        "properties": {
+          "source_service_id": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Source Service Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_service_id"
+        ],
+        "title": "PromoteRequestBody",
         "type": "object"
       },
       "ReloadMode": {
@@ -300,6 +394,263 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/alerts": {
+      "get": {
+        "operationId": "list_alerts_api_alerts_get",
+        "parameters": [
+          {
+            "description": "按状态过滤",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AlertStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按状态过滤",
+              "title": "Status"
+            }
+          },
+          {
+            "description": "按服务过滤",
+            "in": "query",
+            "name": "service",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按服务过滤",
+              "title": "Service"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Alerts Api Alerts Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Alerts",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/api/approvals": {
+      "get": {
+        "description": "列出待审批(pending),最新在前;供审批面板展示。",
+        "operationId": "list_approvals_api_approvals_get",
+        "parameters": [
+          {
+            "description": "按环境过滤",
+            "in": "query",
+            "name": "env",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按环境过滤",
+              "title": "Env"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Approvals Api Approvals Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Approvals",
+        "tags": [
+          "approvals"
+        ]
+      }
+    },
+    "/api/approvals/{approval_id}/approve": {
+      "post": {
+        "description": "批准一条待审批的高危操作,建 task 执行原动作(当前支持 deploy)。\n\n批准者需 approval:{env}:approve 权限,且不能是发起人本人(§13 四眼原则)。",
+        "operationId": "approve_api_approvals__approval_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "approval_id",
+            "required": true,
+            "schema": {
+              "title": "Approval Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Approve Api Approvals  Approval Id  Approve Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Approve",
+        "tags": [
+          "approvals"
+        ]
+      }
+    },
+    "/api/approvals/{approval_id}/reject": {
+      "post": {
+        "description": "拒绝一条待审批操作,记录理由;不执行任何动作。",
+        "operationId": "reject_api_approvals__approval_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "approval_id",
+            "required": true,
+            "schema": {
+              "title": "Approval Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Reject Api Approvals  Approval Id  Reject Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reject",
+        "tags": [
+          "approvals"
+        ]
+      }
+    },
     "/api/auth/login": {
       "post": {
         "operationId": "login_api_auth_login_post",
@@ -850,6 +1201,341 @@
         ]
       }
     },
+    "/api/services/{service_id}/configs": {
+      "get": {
+        "description": "配置版本历史(§15.3),最新在前;服务不存在 404。",
+        "operationId": "list_config_versions_api_services__service_id__configs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Config Versions Api Services  Service Id  Configs Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Config Versions",
+        "tags": [
+          "services"
+        ]
+      },
+      "post": {
+        "description": "新建配置版本(§15.3 暂存),新版自动成为 current。按 service.env 鉴权 operate。",
+        "operationId": "create_config_version_api_services__service_id__configs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigVersionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Config Version Api Services  Service Id  Configs Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Config Version",
+        "tags": [
+          "services"
+        ]
+      }
+    },
+    "/api/services/{service_id}/configs/current": {
+      "get": {
+        "description": "当前生效配置版本(§15.3);无版本返回 null;服务不存在 404。",
+        "operationId": "get_current_config_api_services__service_id__configs_current_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Current Config Api Services  Service Id  Configs Current Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Current Config",
+        "tags": [
+          "services"
+        ]
+      }
+    },
+    "/api/services/{service_id}/configs/{version}/activate": {
+      "post": {
+        "description": "切换生效版本(§15.3 配置回滚)。按 service.env 鉴权 operate;目标版不存在 404。",
+        "operationId": "activate_config_version_api_services__service_id__configs__version__activate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Activate Config Version Api Services  Service Id  Configs  Version  Activate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Activate Config Version",
+        "tags": [
+          "services"
+        ]
+      }
+    },
+    "/api/services/{service_id}/configs/{version}/apply": {
+      "post": {
+        "description": "下发指定配置版本到该服务各放置点(§15.3)。异步落 UPDATE_CONFIG task,逐目标\n写 config_deliveries;返回 task_id 供前端轮询。按 service.env 鉴权 operate。",
+        "operationId": "apply_config_version_api_services__service_id__configs__version__apply_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Apply Config Version Api Services  Service Id  Configs  Version  Apply Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Apply Config Version",
+        "tags": [
+          "services"
+        ]
+      }
+    },
+    "/api/services/{service_id}/configs/{version}/deliveries": {
+      "get": {
+        "description": "某配置版本的逐目标下发结果(§14.5),供下发页展示部分成功/失败;版本不存在 404。",
+        "operationId": "list_config_deliveries_api_services__service_id__configs__version__deliveries_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Config Deliveries Api Services  Service Id  Configs  Version  Deliveries Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Config Deliveries",
+        "tags": [
+          "services"
+        ]
+      }
+    },
     "/api/services/{service_id}/deploy": {
       "post": {
         "description": "UI 触发部署(§8.1 模式 A):落 deploy task 与 deployment 记录,异步调 CI。\n\n鉴权按 service.env 判 service:{env}:deploy。task 与审计在请求会话内落库\n(先于后台任务运行),后台任务另起会话跑 DeploymentService 编排。",
@@ -1032,6 +1718,66 @@
           }
         ],
         "summary": "Get Deployment Detail",
+        "tags": [
+          "services"
+        ]
+      }
+    },
+    "/api/services/{service_id}/promote": {
+      "post": {
+        "description": "环境晋升(§10.3):取源服务(如 staging)最近成功部署的同一制品,在本\n目标服务(如 prod)重新部署,不重构建。异步落 DEPLOY task。\n\n鉴权按目标 service.env 判 operate:晋升到 prod 需 prod 部署权限。源与目标\n须同名不同 env(晋升是跨环境搬同一制品,不是任意服务间拷贝)。",
+        "operationId": "promote_service_api_services__service_id__promote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromoteRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Promote Service Api Services  Service Id  Promote Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Promote Service",
         "tags": [
           "services"
         ]

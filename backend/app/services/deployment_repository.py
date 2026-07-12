@@ -93,6 +93,21 @@ class DeploymentRepository:
         await self._session.flush()
         return deployment
 
+    async def list_running(self, *, limit: int = 200) -> Sequence[Deployment]:
+        """列出所有仍处 running 的部署(跨 service),供轮询兜底补齐终态(§8.2)。
+
+        最旧在前:优先补偿卡得最久的记录。上限防一次拉取过多,补偿是周期任务,
+        未覆盖的下一轮继续。
+        """
+        stmt = (
+            select(Deployment)
+            .where(Deployment.status == DeploymentStatus.RUNNING)
+            .order_by(Deployment.created_at.asc())
+            .limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalars().all()
+
     async def latest_successful(
         self, service_id: str, *, env: str
     ) -> Deployment | None:

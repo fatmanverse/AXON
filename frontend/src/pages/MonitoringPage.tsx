@@ -14,9 +14,11 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/client";
 import { listServers } from "@/api/servers";
+import { listServices } from "@/api/services";
+import { listDeployments } from "@/api/deployments";
 import { queryRange } from "@/api/metrics";
 import { matrixToSeries } from "@/api/metricsTransform";
-import { ResourceChart } from "@/components/ResourceChart";
+import { ResourceChart, type DeployMarker } from "@/components/ResourceChart";
 import { colors } from "@/theme";
 
 const NODE_EXPORTER_PORT = 9100;
@@ -73,12 +75,34 @@ const CHART_SPECS: ChartSpec[] = [
 export function MonitoringPage(): React.ReactElement {
   const [range, setRange] = useState<RangeValue>("1h");
   const [serverId, setServerId] = useState<string | undefined>();
+  // 部署标注(§9.2 运维最爱):可选叠加某服务的部署时间点竖线到曲线上
+  const [markerServiceId, setMarkerServiceId] = useState<string | undefined>();
 
   const {
     data: servers,
     isLoading: serversLoading,
     error: serversError,
   } = useQuery({ queryKey: ["servers"], queryFn: listServers });
+
+  const { data: services } = useQuery({ queryKey: ["services"], queryFn: () => listServices() });
+
+  // 选中服务的部署历史 → 竖线标注(取成功/进行中的 started_at 打点)
+  const { data: markerDeployments } = useQuery({
+    queryKey: ["deployments", markerServiceId],
+    queryFn: () => listDeployments(markerServiceId as string),
+    enabled: Boolean(markerServiceId),
+  });
+
+  const markers: DeployMarker[] = useMemo(() => {
+    const end = Math.floor(Date.now() / 1000);
+    const rangeSpec = RANGE_OPTIONS.find((r) => r.value === range) ?? RANGE_OPTIONS[1];
+    const startMs = (end - rangeSpec.seconds) * 1000;
+    return (markerDeployments ?? [])
+      .filter((d) => d.started_at)
+      .map((d) => ({ t: new Date(d.started_at as string).getTime(), label: d.version ?? "部署" }))
+      // 只保留落在当前时间窗内的标注,避免窗外竖线挤在边缘
+      .filter((m) => m.t >= startMs && m.t <= end * 1000);
+  }, [markerDeployments, range]);
 
   const selected = useMemo(
     () => servers?.find((s) => s.id === serverId) ?? servers?.[0],
@@ -151,6 +175,18 @@ export function MonitoringPage(): React.ReactElement {
             style={{ width: 200 }}
             options={servers.map((s) => ({ label: `${s.name}（${s.host}）`, value: s.id }))}
           />
+          <Select
+            size="small"
+            allowClear
+            placeholder="叠加部署标注（选服务）"
+            value={markerServiceId}
+            onChange={setMarkerServiceId}
+            style={{ width: 200 }}
+            options={(services ?? []).map((s) => ({
+              label: `${s.name}（${s.env}）`,
+              value: s.id,
+            }))}
+          />
         </Space>
         <Segmented
           size="small"
@@ -170,6 +206,7 @@ export function MonitoringPage(): React.ReactElement {
                   title={spec.title}
                   unit={spec.unit}
                   series={q.data ?? []}
+                  markers={markers}
                   loading={q.isLoading}
                   error={
                     q.error instanceof ApiError

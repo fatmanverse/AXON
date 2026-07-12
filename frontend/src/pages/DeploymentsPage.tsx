@@ -12,7 +12,6 @@
 import { useMemo, useState } from "react";
 import {
   Button,
-  Card,
   Empty,
   Form,
   Input,
@@ -23,26 +22,21 @@ import {
   Select,
   Skeleton,
   Table,
-  Tabs,
   Tag,
   message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/client";
 import { listServices, type Service } from "@/api/services";
 import {
-  type ConfigFormat,
-  type ConfigVersion,
   type Deployment,
   type DeploymentStatus,
+  type DeploymentStrategy,
   type ScanResult,
-  activateConfigVersion,
-  createConfigVersion,
-  getCurrentConfig,
+  deployService,
   getDeploymentDetail,
-  listConfigVersions,
   listDeployments,
   rollbackService,
 } from "@/api/deployments";
@@ -56,17 +50,27 @@ const STATUS_TAG: Record<DeploymentStatus, { color: string; label: string }> = {
   rolled_back: { color: "#8C8C8C", label: "已回滚" },
 };
 
-const FORMAT_OPTIONS: { label: string; value: ConfigFormat }[] = [
-  { label: "env", value: "env" },
-  { label: "yaml", value: "yaml" },
-  { label: "properties", value: "properties" },
-  { label: "json", value: "json" },
+// 发布策略选项(§11)。canary/blue-green 目前后端仅 k8s+Argo 支持,裸机会明确报错;
+// 这里全部列出,由后端按 runtime 决定是否受理,不受理时回显后端的 501 提示。
+const STRATEGY_OPTIONS: { label: string; value: DeploymentStrategy }[] = [
+  { label: "滚动", value: "rolling" },
+  { label: "重建", value: "recreate" },
+  { label: "金丝雀", value: "canary" },
+  { label: "蓝绿", value: "blue-green" },
 ];
+
+interface DeployFormValues {
+  version: string;
+  strategy: DeploymentStrategy;
+}
 
 function DeploymentsTab({ serviceId }: { serviceId: string }): React.ReactElement {
   const queryClient = useQueryClient();
   const [rolling, setRolling] = useState(false);
   const [scanDepId, setScanDepId] = useState<string | null>(null);
+  const [deployOpen, setDeployOpen] = useState(false);
+  const [deploying, setDeploying] = useState(false);
+  const [deployForm] = Form.useForm<DeployFormValues>();
 
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: ["deployment-detail", serviceId, scanDepId],
@@ -99,6 +103,35 @@ function DeploymentsTab({ serviceId }: { serviceId: string }): React.ReactElemen
       message.error(err instanceof ApiError ? err.message : "回滚请求失败");
     } finally {
       setRolling(false);
+    }
+  };
+
+  // 触发部署:选版本 + 策略,异步落 task,轮询到终态回显,并刷新历史。
+  const handleDeploy = async (values: DeployFormValues): Promise<void> => {
+    setDeploying(true);
+    const hide = message.loading("部署触发中…", 0);
+    try {
+      const accepted = await deployService(serviceId, {
+        version: values.version,
+        strategy: values.strategy,
+      });
+      const task = await pollTaskUntilDone(accepted.task_id);
+      hide();
+      if (task.status === "success") {
+        message.success("部署成功");
+      } else if (task.status === "failed") {
+        message.error(`部署失败:${task.error ?? "未知错误"}`);
+      } else {
+        message.warning("部署状态未知,请稍后核对");
+      }
+      setDeployOpen(false);
+      deployForm.resetFields();
+      void queryClient.invalidateQueries({ queryKey: ["deployments", serviceId] });
+    } catch (err) {
+      hide();
+      message.error(err instanceof ApiError ? err.message : "部署请求失败");
+    } finally {
+      setDeploying(false);
     }
   };
 
@@ -156,7 +189,10 @@ function DeploymentsTab({ serviceId }: { serviceId: string }): React.ReactElemen
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
+        <Button type="primary" onClick={() => setDeployOpen(true)}>
+          触发部署
+        </Button>
         <Popconfirm
           title="确认回滚到上一版本?"
           description="回滚会重新部署上一次成功的制品,并生成新记录。"
@@ -236,7 +272,7 @@ function DeploymentsTab({ serviceId }: { serviceId: string }): React.ReactElemen
         ) : (
           <Empty
             description={
-              detail && !detail.git_sha
+              detail && !detail.deployment.git_sha
                 ? "该部署未关联提交(无 git_sha),无扫描结论"
                 : "无关联扫描结论"
             }
@@ -244,149 +280,37 @@ function DeploymentsTab({ serviceId }: { serviceId: string }): React.ReactElemen
           />
         )}
       </Modal>
-    </div>
-  );
-}
-
-function ConfigTab({ serviceId }: { serviceId: string }): React.ReactElement {
-  const queryClient = useQueryClient();
-  const [form] = Form.useForm<{ content: string; format: ConfigFormat; comment?: string }>();
-
-  const { data: versions, isLoading } = useQuery({
-    queryKey: ["configs", serviceId],
-    queryFn: () => listConfigVersions(serviceId),
-  });
-  const { data: current } = useQuery({
-    queryKey: ["config-current", serviceId],
-    queryFn: () => getCurrentConfig(serviceId),
-  });
-
-  const invalidate = (): void => {
-    void queryClient.invalidateQueries({ queryKey: ["configs", serviceId] });
-    void queryClient.invalidateQueries({ queryKey: ["config-current", serviceId] });
-  };
-
-  const createMutation = useMutation({
-    mutationFn: (body: { content: string; format: ConfigFormat; comment?: string }) =>
-      createConfigVersion(serviceId, body),
-    onSuccess: (cfg) => {
-      message.success(`已保存配置 v${cfg.version}`);
-      form.resetFields();
-      invalidate();
-    },
-    onError: (err) => message.error(err instanceof ApiError ? err.message : "保存失败"),
-  });
-
-  const activateMutation = useMutation({
-    mutationFn: (version: number) => activateConfigVersion(serviceId, version),
-    onSuccess: (cfg) => {
-      message.success(`已切换到 v${cfg.version}`);
-      invalidate();
-    },
-    onError: (err) => message.error(err instanceof ApiError ? err.message : "切换失败"),
-  });
-
-  const columns: ColumnsType<ConfigVersion> = [
-    {
-      title: "版本",
-      dataIndex: "version",
-      key: "version",
-      width: 70,
-      render: (v: number, row) => (
-        <span>
-          v{v}
-          {row.is_current && (
-            <Tag color={colors.success} style={{ marginLeft: 6 }}>
-              生效中
-            </Tag>
-          )}
-        </span>
-      ),
-    },
-    { title: "格式", dataIndex: "format", key: "format", width: 90 },
-    {
-      title: "说明",
-      dataIndex: "comment",
-      key: "comment",
-      render: (c: string | null) => c ?? <span style={{ color: "#B0B3B5" }}>—</span>,
-    },
-    { title: "修改人", dataIndex: "created_by", key: "created_by", width: 110 },
-    {
-      title: "操作",
-      key: "actions",
-      width: 90,
-      render: (_, row) =>
-        row.is_current ? (
-          <span style={{ color: "#B0B3B5" }}>—</span>
-        ) : (
-          <Popconfirm
-            title={`切换到 v${row.version}?`}
-            okText="切换"
-            cancelText="取消"
-            onConfirm={() => activateMutation.mutate(row.version)}
-          >
-            <Button size="small" type="link">
-              设为生效
-            </Button>
-          </Popconfirm>
-        ),
-    },
-  ];
-
-  return (
-    <div>
-      <Card
-        size="small"
-        title="新建配置版本"
-        style={{ marginBottom: 12 }}
-        styles={{ header: { fontSize: 13, fontWeight: 600 } }}
+      <Modal
+        title="触发部署"
+        open={deployOpen}
+        onCancel={() => setDeployOpen(false)}
+        confirmLoading={deploying}
+        okText="部署"
+        cancelText="取消"
+        onOk={() => deployForm.submit()}
       >
         <Form
-          form={form}
+          form={deployForm}
           layout="vertical"
-          initialValues={{ format: "env" }}
-          onFinish={(v) => createMutation.mutate(v)}
+          initialValues={{ strategy: "rolling" }}
+          onFinish={(v) => void handleDeploy(v)}
         >
-          <Form.Item name="format" label="格式">
-            <Segmented options={FORMAT_OPTIONS} />
+          <Form.Item
+            name="version"
+            label="版本"
+            rules={[{ required: true, message: "请输入部署版本" }]}
+          >
+            <Input placeholder="如 v1.2.3" />
           </Form.Item>
           <Form.Item
-            name="content"
-            label="配置内容"
-            extra="敏感值用 ${secret:名称} 引用,不要写明文密钥。"
-            rules={[{ required: true, message: "请输入配置内容" }]}
+            name="strategy"
+            label="发布策略"
+            extra="k8s 支持 rolling / recreate;canary、蓝绿需 Argo Rollouts 等,暂未实现。"
           >
-            <Input.TextArea rows={6} placeholder={"A=1\nB=2"} />
-          </Form.Item>
-          <Form.Item name="comment" label="变更说明(可选)">
-            <Input placeholder="如 调高连接池上限" />
-          </Form.Item>
-          <Form.Item style={{ marginBottom: 0 }}>
-            <Button type="primary" htmlType="submit" loading={createMutation.isPending}>
-              保存新版本
-            </Button>
+            <Segmented options={STRATEGY_OPTIONS} />
           </Form.Item>
         </Form>
-      </Card>
-
-      {current && (
-        <div style={{ marginBottom: 8, fontSize: 13, color: colors.textBody }}>
-          当前生效:v{current.version}
-        </div>
-      )}
-      {isLoading ? (
-        <Skeleton active paragraph={{ rows: 3 }} />
-      ) : (
-        <Table<ConfigVersion>
-          rowKey="id"
-          size="small"
-          columns={columns}
-          dataSource={versions ?? []}
-          pagination={false}
-          locale={{ emptyText: "暂无配置版本" }}
-          bordered
-        />
-      )}
+      </Modal>
     </div>
   );
 }
@@ -441,22 +365,7 @@ export function DeploymentsPage(): React.ReactElement {
           }))}
         />
       </div>
-      {selected && (
-        <Tabs
-          items={[
-            {
-              key: "deployments",
-              label: "部署历史",
-              children: <DeploymentsTab serviceId={selected.id} />,
-            },
-            {
-              key: "configs",
-              label: "配置管理",
-              children: <ConfigTab serviceId={selected.id} />,
-            },
-          ]}
-        />
-      )}
+      {selected && <DeploymentsTab serviceId={selected.id} />}
     </div>
   );
 }

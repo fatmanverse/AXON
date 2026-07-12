@@ -8,6 +8,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   AlertOutlined,
   ApiOutlined,
+  AuditOutlined,
   CloudServerOutlined,
   DeploymentUnitOutlined,
   FileTextOutlined,
@@ -32,6 +33,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: "/servers", label: "服务器", icon: <CloudServerOutlined /> },
   { key: "/services", label: "服务", icon: <ApiOutlined /> },
   { key: "/deployments", label: "部署", icon: <DeploymentUnitOutlined /> },
+  { key: "/approvals", label: "审批", icon: <AuditOutlined /> },
   { key: "/configs", label: "配置", icon: <FileTextOutlined /> },
   { key: "/monitoring", label: "监控", icon: <LineChartOutlined /> },
   { key: "/alerts", label: "告警", icon: <AlertOutlined /> },

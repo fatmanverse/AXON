@@ -4,6 +4,85 @@
  */
 
 export interface paths {
+    "/api/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Alerts */
+        get: operations["list_alerts_api_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Approvals
+         * @description 列出待审批(pending),最新在前;供审批面板展示。
+         */
+        get: operations["list_approvals_api_approvals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/{approval_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve
+         * @description 批准一条待审批的高危操作,建 task 执行原动作(当前支持 deploy)。
+         *
+         *     批准者需 approval:{env}:approve 权限,且不能是发起人本人(§13 四眼原则)。
+         */
+        post: operations["approve_api_approvals__approval_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/{approval_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject
+         * @description 拒绝一条待审批操作,记录理由;不执行任何动作。
+         */
+        post: operations["reject_api_approvals__approval_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/login": {
         parameters: {
             query?: never;
@@ -159,6 +238,111 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/services/{service_id}/configs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Config Versions
+         * @description 配置版本历史(§15.3),最新在前;服务不存在 404。
+         */
+        get: operations["list_config_versions_api_services__service_id__configs_get"];
+        put?: never;
+        /**
+         * Create Config Version
+         * @description 新建配置版本(§15.3 暂存),新版自动成为 current。按 service.env 鉴权 operate。
+         */
+        post: operations["create_config_version_api_services__service_id__configs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/services/{service_id}/configs/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Current Config
+         * @description 当前生效配置版本(§15.3);无版本返回 null;服务不存在 404。
+         */
+        get: operations["get_current_config_api_services__service_id__configs_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/services/{service_id}/configs/{version}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate Config Version
+         * @description 切换生效版本(§15.3 配置回滚)。按 service.env 鉴权 operate;目标版不存在 404。
+         */
+        post: operations["activate_config_version_api_services__service_id__configs__version__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/services/{service_id}/configs/{version}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Config Version
+         * @description 下发指定配置版本到该服务各放置点(§15.3)。异步落 UPDATE_CONFIG task,逐目标
+         *     写 config_deliveries;返回 task_id 供前端轮询。按 service.env 鉴权 operate。
+         */
+        post: operations["apply_config_version_api_services__service_id__configs__version__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/services/{service_id}/configs/{version}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Config Deliveries
+         * @description 某配置版本的逐目标下发结果(§14.5),供下发页展示部分成功/失败;版本不存在 404。
+         */
+        get: operations["list_config_deliveries_api_services__service_id__configs__version__deliveries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/services/{service_id}/deploy": {
         parameters: {
             query?: never;
@@ -219,6 +403,30 @@ export interface paths {
         get: operations["get_deployment_detail_api_services__service_id__deployments__deployment_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/services/{service_id}/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Promote Service
+         * @description 环境晋升(§10.3):取源服务(如 staging)最近成功部署的同一制品,在本
+         *     目标服务(如 prod)重新部署,不重构建。异步落 DEPLOY task。
+         *
+         *     鉴权按目标 service.env 判 operate:晋升到 prod 需 prod 部署权限。源与目标
+         *     须同名不同 env(晋升是跨环境搬同一制品,不是任意服务间拷贝)。
+         */
+        post: operations["promote_service_api_services__service_id__promote_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -402,6 +610,44 @@ export interface components {
          */
         AccessMode: "ssh" | "agent";
         /**
+         * AlertStatus
+         * @enum {string}
+         */
+        AlertStatus: "firing" | "resolved";
+        /**
+         * ApprovalDecision
+         * @description 拒绝审批的入参(reason 说明拒绝理由)。approve 无需 body。
+         */
+        ApprovalDecision: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * ConfigFormat
+         * @enum {string}
+         */
+        ConfigFormat: "env" | "yaml" | "properties" | "json";
+        /**
+         * ConfigVersionCreate
+         * @description 新建配置版本入参(§15.3 暂存)。content 允许空串(占位版本)。
+         *
+         *     target_path 是下发时写到目标机的绝对路径(§12.2);不填则该版本只能查看/diff,
+         *     apply 下发时会因缺路径而失败。
+         */
+        ConfigVersionCreate: {
+            /** Comment */
+            comment?: string | null;
+            /**
+             * Content
+             * @default
+             */
+            content: string;
+            /** @default env */
+            format: components["schemas"]["ConfigFormat"];
+            /** Target Path */
+            target_path?: string | null;
+        };
+        /**
          * DeployRequestBody
          * @description UI 触发部署入参(§15.2 body:{version, strategy})。env 取自服务本身,不由前端传。
          */
@@ -429,6 +675,15 @@ export interface components {
             password: string;
             /** Username */
             username: string;
+        };
+        /**
+         * PromoteRequestBody
+         * @description 环境晋升入参(§10.3):把 source_service_id(如 staging)最近一次成功部署的
+         *     制品晋升到当前(目标)服务。source 与目标须同名不同 env(如 billing staging→prod)。
+         */
+        PromoteRequestBody: {
+            /** Source Service Id */
+            source_service_id: string;
         };
         /**
          * ReloadMode
@@ -515,6 +770,147 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_alerts_api_alerts_get: {
+        parameters: {
+            query?: {
+                /** @description 按状态过滤 */
+                status?: components["schemas"]["AlertStatus"] | null;
+                /** @description 按服务过滤 */
+                service?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_approvals_api_approvals_get: {
+        parameters: {
+            query?: {
+                /** @description 按环境过滤 */
+                env?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_api_approvals__approval_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_api_approvals__approval_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     login_api_auth_login_post: {
         parameters: {
             query?: never;
@@ -873,6 +1269,211 @@ export interface operations {
             };
         };
     };
+    list_config_versions_api_services__service_id__configs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_config_version_api_services__service_id__configs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigVersionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_config_api_services__service_id__configs_current_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_config_version_api_services__service_id__configs__version__activate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_id: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_config_version_api_services__service_id__configs__version__apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_id: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_config_deliveries_api_services__service_id__configs__version__deliveries_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_id: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     deploy_service_api_services__service_id__deploy_post: {
         parameters: {
             query?: never;
@@ -960,6 +1561,43 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    promote_service_api_services__service_id__promote_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromoteRequestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };

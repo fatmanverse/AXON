@@ -14,7 +14,11 @@ celery_app = Celery(
     "yimai",
     broker=settings.broker_url,
     backend=settings.result_backend,
-    include=["app.workers.sample", "app.workers.status_tasks"],
+    include=[
+        "app.workers.sample",
+        "app.workers.status_tasks",
+        "app.workers.deploy_tasks",
+    ],
 )
 
 celery_app.conf.update(
@@ -33,7 +37,11 @@ celery_app.conf.update(
 
 @celery_app.on_after_configure.connect
 def _setup_periodic_tasks(sender, **kwargs):
-    # 延迟导入避免循环:status_tasks 依赖 celery_app。beat 启动时登记采集周期。
-    from app.workers.status_tasks import register_beat_schedule
+    # 延迟导入避免循环:worker 模块依赖 celery_app。beat 启动时登记周期任务。
+    from app.workers.deploy_tasks import (
+        register_beat_schedule as register_deploy_reconcile,
+    )
+    from app.workers.status_tasks import register_beat_schedule as register_status_collect
 
-    register_beat_schedule(sender)
+    register_status_collect(sender)
+    register_deploy_reconcile(sender)

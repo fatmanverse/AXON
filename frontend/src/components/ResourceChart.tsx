@@ -13,6 +13,14 @@ import { Empty, Skeleton } from "antd";
 import type { LineSeries } from "@/api/metricsTransform";
 import { colors } from "@/theme";
 
+/** 部署标注:一条竖线打在部署时间点上(§9.2「运维最爱」),看"发布后曲线变化"。 */
+export interface DeployMarker {
+  /** 部署时间(毫秒时间戳,对齐 xAxis type:time)。 */
+  t: number;
+  /** 悬浮标签,如 "v1.2.0 · 张三"。 */
+  label: string;
+}
+
 interface ResourceChartProps {
   title: string;
   series: LineSeries[];
@@ -21,6 +29,8 @@ interface ResourceChartProps {
   /** y 轴单位后缀,如 "%";留空则不加。 */
   unit?: string;
   height?: number;
+  /** 部署时间点标注:在图上按时间打竖线(§9.2)。 */
+  markers?: DeployMarker[];
 }
 
 const PALETTE = [colors.primary, colors.info, colors.warning, colors.danger, "#9B59B6"];
@@ -32,6 +42,7 @@ export function ResourceChart({
   error = null,
   unit = "",
   height = 220,
+  markers = [],
 }: ResourceChartProps): React.ReactElement {
   if (loading) {
     return <Skeleton active paragraph={{ rows: 4 }} title={false} />;
@@ -65,13 +76,28 @@ export function ResourceChart({
       axisLabel: { fontSize: 11, color: colors.textBody, formatter: `{value}${unit}` },
       splitLine: { lineStyle: { color: "#F0F0F0" } },
     },
-    series: series.map((s) => ({
+    series: series.map((s, idx) => ({
       name: s.name,
       type: "line",
       showSymbol: false,
       smooth: true,
       lineStyle: { width: 1.5 },
       data: s.points.map((p) => [p.t, p.v]),
+      // 部署标注只挂到第一条 series,避免多条线重复画竖线(§9.2 部署时间点竖线)
+      markLine:
+        idx === 0 && markers.length > 0
+          ? {
+              symbol: "none",
+              silent: false,
+              lineStyle: { color: colors.primary, type: "dashed", width: 1 },
+              label: {
+                fontSize: 10,
+                color: colors.primary,
+                formatter: (params: { name?: string }) => params.name ?? "部署",
+              },
+              data: markers.map((m) => ({ xAxis: m.t, name: m.label })),
+            }
+          : undefined,
     })),
   };
 

@@ -8,12 +8,13 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { LoginPage } from "@/pages/LoginPage";
-import { PlaceholderPage } from "@/pages/PlaceholderPage";
 import { MonitoringPage } from "@/pages/MonitoringPage";
 import { ServersPage } from "@/pages/ServersPage";
 import { ServicesPage } from "@/pages/ServicesPage";
 import { DeploymentsPage } from "@/pages/DeploymentsPage";
+import { ConfigsPage } from "@/pages/ConfigsPage";
 import { AlertsPage } from "@/pages/AlertsPage";
+import { ApprovalsPage } from "@/pages/ApprovalsPage";
 
 export function App(): React.ReactElement {
   return (
@@ -25,8 +26,9 @@ export function App(): React.ReactElement {
           <Route path="/servers" element={<ServersPage />} />
           <Route path="/services" element={<ServicesPage />} />
           <Route path="/deployments" element={<DeploymentsPage />} />
-          <Route path="/configs" element={<PlaceholderPage title="配置" />} />
+          <Route path="/configs" element={<ConfigsPage />} />
           <Route path="/monitoring" element={<MonitoringPage />} />
+          <Route path="/approvals" element={<ApprovalsPage />} />
           <Route path="/alerts" element={<AlertsPage />} />
         </Route>
       </Route>

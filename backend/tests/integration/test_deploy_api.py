@@ -51,6 +51,8 @@ async def app_client():
         secret_backend="local",
         secret_master_key="",
         rate_limit_enabled=False,
+        # 本文件验证「部署编排本身」,不测审批;显式关审批走直接部署路径
+        require_prod_approval=False,
     )
     app: FastAPI = create_app(settings)
 

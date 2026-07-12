@@ -19,18 +19,17 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from app.adapters.agent_gateway import AgentGateway
 from app.adapters.executor import Executor
 from app.adapters.k8s_runtime import AppsV1ApiLike, K8sRuntime
 from app.adapters.runtime_registry import SSH_RUNTIMES
-from app.adapters.ssh_executor import SSHExecutor, SSHTarget
 from app.core.db import Database
 from app.core.errors import AppError
 from app.core.logging import get_logger
 from app.core.secrets import SecretStore
-from app.models.server import AccessMode, Server
+from app.models.server import Server
 from app.models.service import Runtime, ServicePlacement
 from app.models.task import TaskStatus, TaskType
+from app.services.executor_factory import build_executor_for_server
 from app.services.server_repository import ServerRepository
 from app.services.service_repository import ServiceRepository
 from app.services.task_repository import TaskRepository
@@ -65,9 +64,7 @@ class LifecycleService:
         # 缺省为 None:未配置 k8s client 时对 k8s 服务的动作会明确报错而非静默。
         self._k8s_api_factory = k8s_api_factory
 
-    async def run_action(
-        self, *, task_id: str, service_id: str, action: TaskType
-    ) -> None:
+    async def run_action(self, *, task_id: str, service_id: str, action: TaskType) -> None:
         """执行一次生命周期动作。全程不抛:结果落在 task 状态上。"""
         # 第一段事务:标记 running,让轮询立即看到状态推进
         async with self._db.session() as session:
@@ -84,9 +81,7 @@ class LifecycleService:
                 error=message,
             )
             async with self._db.session() as session:
-                await TaskRepository(session).mark_result(
-                    task_id, TaskStatus.FAILED, error=message
-                )
+                await TaskRepository(session).mark_result(task_id, TaskStatus.FAILED, error=message)
             return
 
         async with self._db.session() as session:
@@ -104,11 +99,7 @@ class LifecycleService:
             server_repo = ServerRepository(session)
             targets: list[tuple[ServicePlacement, Server | None]] = []
             for placement in placements:
-                server = (
-                    await server_repo.get(placement.server_id)
-                    if placement.server_id
-                    else None
-                )
+                server = await server_repo.get(placement.server_id) if placement.server_id else None
                 targets.append((placement, server))
             runtime = service.runtime
             runtime_ref = dict(service.runtime_ref or {})
@@ -131,19 +122,8 @@ class LifecycleService:
             await self._dispatch(executor, runtime, runtime_ref, action)
 
     def _build_executor(self, server: Server | None) -> Executor:
-        """按 server.access_mode 选择执行器。"""
-        if server is None or server.access_mode == AccessMode.AGENT:
-            # 无 server(理论上 k8s)或 agent 模式:走 Agent 网关(当前占位)
-            return AgentGateway()
-
-        labels = server.labels or {}
-        target = SSHTarget(
-            host=server.host,
-            port=int(labels.get("ssh_port", 22)),
-            username=str(labels.get("ssh_username", "root")),
-            credential_id=server.ssh_credential_id or "",
-        )
-        return SSHExecutor(target, self._secrets, connector=self._connector)
+        """按 server.access_mode 选择执行器(共享工厂,与配置下发一致)。"""
+        return build_executor_for_server(server, self._secrets, connector=self._connector)
 
     async def _dispatch(
         self,
@@ -181,9 +161,7 @@ class LifecycleService:
         adapter = spec.adapter_cls(executor)
         await getattr(adapter, method_name)(target)
 
-    async def _dispatch_k8s(
-        self, runtime_ref: dict[str, Any], action: TaskType
-    ) -> None:
+    async def _dispatch_k8s(self, runtime_ref: dict[str, Any], action: TaskType) -> None:
         """k8s 分支:经注入的 client 对 Deployment 执行动作。"""
         if self._k8s_api_factory is None:
             raise AppError(

@@ -27,6 +27,7 @@ from app.models.service import Service
 from app.models.task import TaskStatus
 from app.services.deployment_repository import DeploymentRepository
 from app.services.health_checker import HealthChecker
+from app.services.release_strategy import RolloutContext, execute_release_strategy
 from app.services.service_repository import ServiceRepository
 from app.services.task_repository import TaskRepository
 
@@ -35,6 +36,10 @@ log = get_logger("deployment")
 # 按 service 解析出用哪个 PipelineAdapter。生产按服务配置构造(Jenkins/GitLab),
 # 缺省或未配置时抛错;测试注入 fake。
 AdapterProvider = Callable[[Service], PipelineAdapter]
+
+# 按 service 解析出发布策略执行上下文(§11)。返回 None 表示该服务不做控制面侧
+# 策略铺开(仅靠 CI 内部);返回 RolloutContext 时按 (runtime, strategy) 执行。
+RolloutProvider = Callable[[Service], RolloutContext | None]
 
 
 @dataclass(frozen=True)
@@ -55,10 +60,15 @@ class DeploymentService:
         *,
         adapter_provider: AdapterProvider,
         health_checker: HealthChecker | None = None,
+        rollout_provider: RolloutProvider | None = None,
     ) -> None:
         self._db = db
         self._adapter_provider = adapter_provider
         self._health_checker = health_checker
+        # 发布策略铺开(§11):按 service 解析出 RolloutContext,CI 触发成功后按
+        # (runtime, strategy) 执行滚动/重建等。默认 None——未注入时保持原行为
+        # (仅触发 CI,由 CI 内部铺开),不破坏既有部署路径与测试。
+        self._rollout_provider = rollout_provider
 
     async def run_deploy(
         self,
@@ -138,6 +148,13 @@ class DeploymentService:
             )
             previous_id = previous.id if previous else None
             adapter = self._adapter_provider(service)
+            # 发布策略上下文在会话内解析(需读 runtime/runtime_ref,避免会话关闭后惰性访问);
+            # 未注入 rollout_provider 时为 None,保持"仅触发 CI"的原行为。
+            rollout_context = (
+                self._rollout_provider(service)
+                if self._rollout_provider is not None
+                else None
+            )
 
         # 落一条 running 部署记录(独立事务,让前端/轮询立即可见)
         async with self._db.session() as session:
@@ -171,6 +188,20 @@ class DeploymentService:
             deployment = await repo.get(deployment_id)
             deployment.pipeline_id = run_id
             await session.flush()
+
+        # 发布策略铺开(§11):该服务解析出了 RolloutContext 时,按 (runtime, strategy)
+        # 执行滚动/重建等。上下文已在首个事务内解析(rollout_context),此处不再触碰
+        # 已脱离会话的 service。失败落 deployment.failed 后上抛(由 run_deploy 落
+        # task.failed),与 CI 触发失败同一语义。
+        if rollout_context is not None:
+            try:
+                await execute_release_strategy(request.strategy, rollout_context)
+            except Exception:
+                async with self._db.session() as session:
+                    await DeploymentRepository(session).mark_status(
+                        deployment_id, DeploymentStatus.FAILED
+                    )
+                raise
 
         return (deployment_id, health_check)
 
@@ -255,5 +286,114 @@ class DeploymentService:
             deployment.pipeline_id = run_id
             await repo.mark_status(deployment_id, DeploymentStatus.SUCCESS)
             await repo.mark_status(current_id, DeploymentStatus.ROLLED_BACK)
+
+        return version
+
+    async def run_promotion(
+        self,
+        *,
+        task_id: str,
+        source_service_id: str,
+        target_service_id: str,
+        operator: str,
+    ) -> None:
+        """执行一次环境晋升编排。全程不抛:结果落在 deployment 与 task 状态上。
+
+        晋升 = 取源环境(如 staging)最近一次成功部署的 artifact,在目标环境(如
+        prod)以**同一制品**重新部署,不重构建(§10.3)——保证上线的与验证过的完全一致。
+        """
+        async with self._db.session() as session:
+            await TaskRepository(session).mark_running(task_id)
+
+        try:
+            version = await self._execute_promotion(
+                source_service_id, target_service_id, operator
+            )
+        except Exception as exc:
+            message = exc.message if isinstance(exc, AppError) else str(exc)
+            log.warning(
+                "promotion_failed",
+                source_service_id=source_service_id,
+                target_service_id=target_service_id,
+                error=message,
+            )
+            async with self._db.session() as session:
+                await TaskRepository(session).mark_result(
+                    task_id, TaskStatus.FAILED, error=message
+                )
+            return
+
+        async with self._db.session() as session:
+            await TaskRepository(session).mark_result(
+                task_id, TaskStatus.SUCCESS, result={"version": version}
+            )
+
+    async def _execute_promotion(
+        self, source_service_id: str, target_service_id: str, operator: str
+    ) -> str:
+        """取源环境最近成功部署的制品→在目标环境落新 running deployment→触发 CI→
+        成功落 success。返回晋升的版本号。源无成功部署或目标服务不存在时抛错。"""
+        async with self._db.session() as session:
+            svc_repo = ServiceRepository(session)
+            source = await svc_repo.get_service(source_service_id)
+            target = await svc_repo.get_service(target_service_id)
+            source_env = source.env.value
+            target_env = target.env.value
+
+            src_deploy = await DeploymentRepository(session).latest_successful(
+                source_service_id, env=source_env
+            )
+            if src_deploy is None:
+                raise AppError(
+                    "no_promotion_source",
+                    "源环境无成功部署,无可晋升的制品",
+                    status_code=409,
+                )
+            artifact = src_deploy.artifact
+            version = src_deploy.version or ""
+            git_sha = src_deploy.git_sha
+            # 目标环境上一次成功部署,挂 previous 支撑回滚链路
+            previous = await DeploymentRepository(session).latest_successful(
+                target_service_id, env=target_env
+            )
+            previous_id = previous.id if previous else None
+            adapter = self._adapter_provider(target)
+
+        # 目标环境落一条 running 晋升记录(同一制品,不重构建)
+        async with self._db.session() as session:
+            deployment = await DeploymentRepository(session).create(
+                service_id=target_service_id,
+                env=target_env,
+                source=DeploymentSource.MANUAL,
+                version=version,
+                artifact=artifact,
+                git_sha=git_sha,
+                operator=operator,
+                previous_deployment_id=previous_id,
+            )
+            deployment_id = deployment.id
+
+        # 触发 CI 用同一制品部署;失败则新记录落 failed 并向上抛
+        try:
+            run_id = await adapter.trigger(
+                version,
+                params={
+                    "ARTIFACT": artifact or "",
+                    "ENV": target_env,
+                    "VERSION": version,
+                },
+            )
+        except Exception:
+            async with self._db.session() as session:
+                await DeploymentRepository(session).mark_status(
+                    deployment_id, DeploymentStatus.FAILED
+                )
+            raise
+
+        async with self._db.session() as session:
+            repo = DeploymentRepository(session)
+            deployment = await repo.get(deployment_id)
+            deployment.pipeline_id = run_id
+            await repo.mark_status(deployment_id, DeploymentStatus.SUCCESS)
 
         return version

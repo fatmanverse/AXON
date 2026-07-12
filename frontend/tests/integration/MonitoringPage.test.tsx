@@ -77,6 +77,8 @@ const MATRIX = {
 
 beforeEach(() => {
   mock = new MockAdapter(http);
+  // 部署标注的服务下拉默认无服务(本文件聚焦服务器指标流,不测标注)
+  mock.onGet("/api/services").reply(200, ok([]));
 });
 
 afterEach(() => {
@@ -137,8 +139,8 @@ describe("MonitoringPage", () => {
     });
     mock.resetHistory();
 
-    // 打开服务器下拉切到 web-02
-    const combobox = screen.getByRole("combobox");
+    // 打开服务器下拉切到 web-02(第一个下拉是服务器,第二个是部署标注服务选择)
+    const combobox = screen.getAllByRole("combobox")[0];
     await user.click(combobox);
     const option = await screen.findByText("web-02（10.0.0.11）", {
       selector: ".ant-select-item-option-content",

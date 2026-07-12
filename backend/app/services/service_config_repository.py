@@ -26,6 +26,7 @@ class ServiceConfigRepository:
         format: ConfigFormat = ConfigFormat.ENV,
         created_by: str | None = None,
         comment: str | None = None,
+        target_path: str | None = None,
     ) -> ServiceConfig:
         """新建一个配置版本。version 按 service 自增,新版自动成为 current。"""
         # 取该 service 当前最大版本号(无则 0),+1 作为新版本
@@ -54,6 +55,7 @@ class ServiceConfigRepository:
             format=format,
             created_by=created_by,
             comment=comment,
+            target_path=target_path,
             is_current=True,
         )
         self._session.add(config)
