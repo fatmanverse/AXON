@@ -129,12 +129,89 @@ async def test_canary_not_supported_on_k8s_without_argo():
     assert k8s.calls == []
 
 
-async def test_blue_green_not_supported_on_bare_metal():
+async def test_blue_green_without_lb_reports_needs_lb():
+    """裸机蓝绿无 LB 注入 → 明确报 501(裸机蓝绿确需负载均衡,不静默降级)。"""
     log: list[tuple[str, str]] = []
     targets = [BareMetalTarget(adapter=FakeBareAdapter("h1", log), ref="a.service")]
     ctx = RolloutContext(runtime=Runtime.SYSTEMD, bare_targets=targets)
     with pytest.raises(AppError) as exc:
         await execute_release_strategy(DeploymentStrategy.BLUE_GREEN, ctx)
+    assert exc.value.status_code == 501
+
+
+async def test_canary_without_lb_reports_needs_lb():
+    log: list[tuple[str, str]] = []
+    targets = [BareMetalTarget(adapter=FakeBareAdapter("h1", log), ref="a.service")]
+    ctx = RolloutContext(runtime=Runtime.SYSTEMD, bare_targets=targets)
+    with pytest.raises(AppError) as exc:
+        await execute_release_strategy(DeploymentStrategy.CANARY, ctx)
+    assert exc.value.status_code == 501
+
+
+class FakeLoadBalancer:
+    """记录 LB 编排调用序列的假实现。"""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple] = []
+
+    async def set_weight(self, target: str, weight: int) -> None:
+        self.calls.append(("set_weight", target, weight))
+
+    async def switch_upstream(self, target: str, upstream: str) -> None:
+        self.calls.append(("switch_upstream", target, upstream))
+
+
+async def test_bare_canary_restarts_then_ramps_weight():
+    """裸机金丝雀有 LB:先重启实例上新版,再按阶梯放量权重。"""
+    log: list[tuple[str, str]] = []
+    lb = FakeLoadBalancer()
+    targets = [
+        BareMetalTarget(adapter=FakeBareAdapter("h1", log), ref="a.service"),
+        BareMetalTarget(adapter=FakeBareAdapter("h2", log), ref="a.service"),
+    ]
+    ctx = RolloutContext(
+        runtime=Runtime.SYSTEMD,
+        bare_targets=targets,
+        load_balancer=lb,
+        upstream_ref="a-upstream",
+        canary_steps=(10, 50, 100),
+    )
+    await execute_release_strategy(DeploymentStrategy.CANARY, ctx)
+    # 先重启两台上新版
+    assert log == [("restart", "h1"), ("restart", "h2")]
+    # 再按阶梯放量
+    assert lb.calls == [
+        ("set_weight", "a-upstream", 10),
+        ("set_weight", "a-upstream", 50),
+        ("set_weight", "a-upstream", 100),
+    ]
+
+
+async def test_bare_blue_green_starts_green_then_switches():
+    """裸机蓝绿有 LB:绿组实例起好后,上游瞬时切到新组。"""
+    log: list[tuple[str, str]] = []
+    lb = FakeLoadBalancer()
+    targets = [BareMetalTarget(adapter=FakeBareAdapter("green", log), ref="a.service")]
+    ctx = RolloutContext(
+        runtime=Runtime.SYSTEMD,
+        bare_targets=targets,
+        load_balancer=lb,
+        upstream_ref="a-upstream",
+        new_upstream="green-pool",
+    )
+    await execute_release_strategy(DeploymentStrategy.BLUE_GREEN, ctx)
+    assert log == [("start", "green")]
+    assert lb.calls == [("switch_upstream", "a-upstream", "green-pool")]
+
+
+async def test_k8s_canary_still_needs_argo():
+    """k8s 侧 canary 仍需 Argo Rollouts(本层不接 CRD),继续报 501。"""
+    k8s = FakeK8s()
+    ctx = RolloutContext(
+        runtime=Runtime.K8S, k8s_adapter=k8s, namespace="p", workload="w", replicas=2
+    )
+    with pytest.raises(AppError) as exc:
+        await execute_release_strategy(DeploymentStrategy.CANARY, ctx)
     assert exc.value.status_code == 501
 
 
