@@ -147,3 +147,34 @@ async def test_deploy_and_status_use_exec():
     # 部署与状态查询最终都落到 SSH 命令执行
     assert any("registry/app:v1" in c for c in conn.ran)
     assert status.name == "app.service"
+
+
+async def test_update_config_writes_content_verbatim_even_with_delimiter():
+    """配置内容含 heredoc 分隔符或 shell 元字符时,仍须原样写入(无注入/无截断)。
+
+    旧实现用 `<<'YIMAI_EOF'` heredoc:若内容里恰有一行 `YIMAI_EOF`,heredoc 提前
+    终止,残余内容被当命令执行——命令注入/文件损坏。改用 base64 编码传输后,
+    无论内容含什么都安全。本测试从下发命令里还原内容,断言与原文逐字节一致。
+    """
+    import base64
+    import re
+
+    store, cred_id = _store_with_key()
+    conn = FakeConnection()
+    executor = SSHExecutor(_target(cred_id), store, connector=lambda **_: conn)
+
+    # 恶意/棘手内容:含 heredoc 分隔符行、命令替换、单引号
+    content = "A=1\nYIMAI_EOF\nrm -rf /\n$(whoami)\nit's a 'trap'\n"
+    await executor.update_config("/etc/app/app.env", content)
+
+    assert conn.ran, "应发出写配置命令"
+    command = conn.ran[-1]
+    # 命令里不得出现可被 shell 解释的原始危险行(须已编码)
+    assert "rm -rf /" not in command
+    assert "$(whoami)" not in command
+    # 从命令中提取 base64 载荷并还原,须与原文逐字节一致。
+    # base64 载荷全是安全字符,shlex.quote 不加引号,故直接匹配 `printf %s <payload>`。
+    match = re.search(r"printf %s ([A-Za-z0-9+/=]{8,})", command)
+    assert match, f"命令应含 base64 载荷: {command}"
+    decoded = base64.b64decode(match.group(1)).decode()
+    assert decoded == content

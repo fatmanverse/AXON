@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import shlex
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -116,8 +117,11 @@ class SSHExecutor(Executor):
         return await self.exec(command)
 
     async def update_config(self, path: str, content: str) -> CommandResult:
-        # 用 here-doc 写入,避免 shell 转义问题;reload/restart 由上层按 reload_mode 决定。
-        command = f"cat > {shlex.quote(path)} <<'YIMAI_EOF'\n{content}\nYIMAI_EOF"
+        # 用 base64 编码传输内容:heredoc 会因内容含分隔符行而提前终止(残余内容被当
+        # 命令执行,命令注入/文件损坏),base64 载荷只含 [A-Za-z0-9+/=],无 shell 可解释
+        # 字符,与内容无关地安全。path 经 shlex.quote 防注入;reload/restart 由上层决定。
+        encoded = base64.b64encode(content.encode()).decode()
+        command = f"printf %s {shlex.quote(encoded)} | base64 -d > {shlex.quote(path)}"
         return await self.exec(command)
 
     async def get_service_status(self, service_ref: str) -> ServiceStatus:
