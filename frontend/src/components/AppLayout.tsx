@@ -10,6 +10,7 @@ import {
   ApiOutlined,
   AuditOutlined,
   CloudServerOutlined,
+  DashboardOutlined,
   DeploymentUnitOutlined,
   FileTextOutlined,
   LineChartOutlined,
@@ -30,6 +31,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  { key: "/", label: "主页", icon: <DashboardOutlined /> },
   { key: "/servers", label: "服务器", icon: <CloudServerOutlined /> },
   { key: "/services", label: "服务", icon: <ApiOutlined /> },
   { key: "/deployments", label: "部署", icon: <DeploymentUnitOutlined /> },

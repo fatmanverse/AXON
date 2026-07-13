@@ -722,6 +722,79 @@
         ]
       }
     },
+    "/api/deployments": {
+      "get": {
+        "description": "跨服务最近部署(最新在前),供主页 Dashboard 部署 feed(§9.2)。",
+        "operationId": "list_recent_deployments_api_deployments_get",
+        "parameters": [
+          {
+            "description": "按环境过滤",
+            "in": "query",
+            "name": "env",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ServiceEnvironment"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按环境过滤",
+              "title": "Env"
+            }
+          },
+          {
+            "description": "返回条数上限",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "description": "返回条数上限",
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Recent Deployments Api Deployments Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Recent Deployments",
+        "tags": [
+          "deployments"
+        ]
+      }
+    },
     "/api/metrics/query": {
       "get": {
         "operationId": "query_api_metrics_query_get",

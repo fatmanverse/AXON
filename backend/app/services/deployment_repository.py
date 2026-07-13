@@ -81,6 +81,17 @@ class DeploymentRepository:
         result = await self._session.execute(stmt)
         return result.scalars().all()
 
+    async def list_recent(
+        self, *, env: str | None = None, limit: int = 20
+    ) -> Sequence[Deployment]:
+        """跨 service 列出最近部署,最新在前(供主页 Dashboard 的部署 feed,§9.2)。"""
+        stmt = select(Deployment)
+        if env is not None:
+            stmt = stmt.where(Deployment.env == env)
+        stmt = stmt.order_by(Deployment.created_at.desc()).limit(limit)
+        result = await self._session.execute(stmt)
+        return result.scalars().all()
+
     async def mark_status(
         self, deployment_id: str, status: DeploymentStatus
     ) -> Deployment:

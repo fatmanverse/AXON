@@ -7,6 +7,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppLayout } from "@/components/AppLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { HomePage } from "@/pages/HomePage";
 import { LoginPage } from "@/pages/LoginPage";
 import { MonitoringPage } from "@/pages/MonitoringPage";
 import { ServersPage } from "@/pages/ServersPage";
@@ -22,7 +23,7 @@ export function App(): React.ReactElement {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
-          <Route index element={<Navigate to="/servers" replace />} />
+          <Route index element={<HomePage />} />
           <Route path="/servers" element={<ServersPage />} />
           <Route path="/services" element={<ServicesPage />} />
           <Route path="/deployments" element={<DeploymentsPage />} />

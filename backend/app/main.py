@@ -8,6 +8,7 @@ from app.api import (
     alerts,
     approvals,
     auth,
+    deployments,
     health,
     metrics,
     servers,
@@ -110,6 +111,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth.router)
     app.include_router(servers.router)
     app.include_router(services.router)
+    app.include_router(deployments.router)
     app.include_router(tasks.router)
     app.include_router(metrics.router)
     app.include_router(webhooks.router)

@@ -66,6 +66,14 @@ export function listDeployments(serviceId: string, env?: string): Promise<Deploy
   return api.get<Deployment[]>(`/api/services/${serviceId}/deployments`, { params });
 }
 
+/** 跨服务最近部署(主页 Dashboard feed,§9.2)。 */
+export function listRecentDeployments(params?: {
+  env?: string;
+  limit?: number;
+}): Promise<Deployment[]> {
+  return api.get<Deployment[]>("/api/deployments", { params });
+}
+
 export function deployService(serviceId: string, body: DeployBody): Promise<TaskAccepted> {
   return api.post<TaskAccepted>(`/api/services/${serviceId}/deploy`, body);
 }

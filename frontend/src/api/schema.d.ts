@@ -117,6 +117,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/deployments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Recent Deployments
+         * @description 跨服务最近部署(最新在前),供主页 Dashboard 部署 feed(§9.2)。
+         */
+        get: operations["list_recent_deployments_api_deployments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/metrics/query": {
         parameters: {
             query?: never;
@@ -964,6 +984,42 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    list_recent_deployments_api_deployments_get: {
+        parameters: {
+            query?: {
+                /** @description 按环境过滤 */
+                env?: components["schemas"]["ServiceEnvironment"] | null;
+                /** @description 返回条数上限 */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
