@@ -59,6 +59,24 @@ export interface ConfigDelivery {
 export interface DeployBody {
   version: string;
   strategy?: DeploymentStrategy;
+  git_sha?: string;
+}
+
+/**
+ * prod 高危部署在开启审批开关时,后端不直接执行而是落 pending 审批
+ *(§10.2/§13),返回审批 id 而非 task_id。前端据此提示"已进入审批"而非轮询 task。
+ */
+export interface PendingApproval {
+  approval_id: string;
+  status: string;
+  pending_approval: true;
+}
+
+/** 部署受理结果:直接执行返回 task,进审批返回 PendingApproval(靠 pending_approval 判别)。 */
+export type DeployResult = TaskAccepted | PendingApproval;
+
+export function isPendingApproval(result: DeployResult): result is PendingApproval {
+  return "pending_approval" in result && result.pending_approval === true;
 }
 
 export function listDeployments(serviceId: string, env?: string): Promise<Deployment[]> {
@@ -74,8 +92,8 @@ export function listRecentDeployments(params?: {
   return api.get<Deployment[]>("/api/deployments", { params });
 }
 
-export function deployService(serviceId: string, body: DeployBody): Promise<TaskAccepted> {
-  return api.post<TaskAccepted>(`/api/services/${serviceId}/deploy`, body);
+export function deployService(serviceId: string, body: DeployBody): Promise<DeployResult> {
+  return api.post<DeployResult>(`/api/services/${serviceId}/deploy`, body);
 }
 
 export function rollbackService(serviceId: string): Promise<TaskAccepted> {

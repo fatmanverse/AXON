@@ -37,6 +37,7 @@ import {
   type ScanResult,
   deployService,
   getDeploymentDetail,
+  isPendingApproval,
   listDeployments,
   rollbackService,
 } from "@/api/deployments";
@@ -106,16 +107,24 @@ function DeploymentsTab({ serviceId }: { serviceId: string }): React.ReactElemen
     }
   };
 
-  // 触发部署:选版本 + 策略,异步落 task,轮询到终态回显,并刷新历史。
+  // 触发部署:选版本 + 策略。prod 开启审批时后端落 pending 审批(返回 approval_id,
+  // 无 task_id),此时提示"已进入审批"而非轮询 task;否则按 task 轮询到终态回显。
   const handleDeploy = async (values: DeployFormValues): Promise<void> => {
     setDeploying(true);
     const hide = message.loading("部署触发中…", 0);
     try {
-      const accepted = await deployService(serviceId, {
+      const result = await deployService(serviceId, {
         version: values.version,
         strategy: values.strategy,
       });
-      const task = await pollTaskUntilDone(accepted.task_id);
+      if (isPendingApproval(result)) {
+        hide();
+        message.info("该操作为生产高危变更,已提交审批,待审批通过后执行");
+        setDeployOpen(false);
+        deployForm.resetFields();
+        return;
+      }
+      const task = await pollTaskUntilDone(result.task_id);
       hide();
       if (task.status === "success") {
         message.success("部署成功");
@@ -305,7 +314,7 @@ function DeploymentsTab({ serviceId }: { serviceId: string }): React.ReactElemen
           <Form.Item
             name="strategy"
             label="发布策略"
-            extra="k8s 支持 rolling / recreate;canary、蓝绿需 Argo Rollouts 等,暂未实现。"
+            extra="k8s 支持 rolling / recreate;canary、蓝绿在裸机(接入负载均衡)可用,k8s 需 Argo Rollouts。"
           >
             <Segmented options={STRATEGY_OPTIONS} />
           </Form.Item>

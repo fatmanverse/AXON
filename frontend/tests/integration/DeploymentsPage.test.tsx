@@ -130,4 +130,29 @@ describe("DeploymentsPage", () => {
       expect(mock.history.post.some((r) => r.url === "/api/services/svc1/rollback")).toBe(true);
     });
   });
+
+  it("prod 部署落 pending 审批时提示已进入审批,不轮询 task", async () => {
+    // prod 高危部署返回 approval_id(无 task_id):前端应提示"已提交审批",
+    // 绝不能拿 undefined 去轮询 /api/tasks(旧 bug)。
+    mock
+      .onPost("/api/services/svc1/deploy")
+      .reply(200, ok({ approval_id: "ap1", status: "pending", pending_approval: true }));
+
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("v1.2.0");
+
+    await user.click(screen.getByRole("button", { name: /触\s*发\s*部\s*署/ }));
+    await user.type(await screen.findByPlaceholderText("如 v1.2.3"), "v9.9.9");
+    // Modal 底部“部署”确认按钮
+    const okBtn = screen.getAllByRole("button", { name: /^部\s*署$/ }).at(-1)!;
+    await user.click(okBtn);
+
+    await waitFor(() => {
+      expect(mock.history.post.some((r) => r.url === "/api/services/svc1/deploy")).toBe(true);
+    });
+    // 关键:没有对 /api/tasks 发起任何轮询(pending 审批不轮询)
+    expect(mock.history.get.some((r) => (r.url ?? "").startsWith("/api/tasks"))).toBe(false);
+    expect(await screen.findByText(/已提交审批/)).toBeInTheDocument();
+  });
 });
