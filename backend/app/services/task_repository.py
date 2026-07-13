@@ -38,6 +38,21 @@ class TaskRepository:
         result = await self._session.execute(select(Task).where(Task.status == status))
         return list(result.scalars().all())
 
+    async def recent_rollbacks_for_target(self, target: str, *, since: datetime) -> list[Task]:
+        """列出某目标(service:<id>)在 since 之后创建的 ROLLBACK task(告警自动回滚防抖用)。
+
+        按 target + type + created_at 过滤;fingerprint 级判定由调用方读 payload 完成
+        (JSON 键跨 sqlite/postgres 查询不可移植,故只在 SQL 里收窄到时间窗+目标+类型,
+        再在 Python 里比对 payload.fingerprint)。
+        """
+        stmt = select(Task).where(
+            Task.target == target,
+            Task.type == TaskType.ROLLBACK,
+            Task.created_at >= since,
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def mark_running(self, task_id: str) -> Task:
         task = await self.get(task_id)
         ensure_transition(task.status, TaskStatus.RUNNING)

@@ -95,6 +95,9 @@ class Settings(BaseSettings):
     deploy_block_on_critical: bool = True
     # 告警触发自动回滚(§11.2):默认关闭,改变生产状态须显式开启
     auto_rollback_on_alert: bool = False
+    # 告警自动回滚防抖窗(秒,§6.3):同一 fingerprint 在窗内已触发过回滚则跳过,
+    # 避免同一告警反复 firing 上报导致重复回滚(抖动误触)。0 或负数关闭防抖。
+    auto_rollback_debounce_sec: float = 600.0
     # 发布后健康检查失败自动回滚(§11.1/§11.2):默认关闭。开启后部署健康检查未通过时,
     # 除标记 FAILED 外再自动回滚到上一版成功制品(留 rolled_back 记录),而非只标失败。
     auto_rollback_on_health_fail: bool = False

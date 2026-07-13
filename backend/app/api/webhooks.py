@@ -11,6 +11,8 @@ rolled_back 是控制面自身回滚闭环产生的状态,不接受外部上报(
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, BackgroundTasks, Request
 
 from app.core.config import Settings
@@ -25,7 +27,7 @@ from app.schemas.alert import AlertmanagerWebhookPayload
 from app.schemas.deployment import DeploymentWebhookPayload
 from app.schemas.scan import ScanWebhookPayload
 from app.services.alert_repository import AlertRepository
-from app.services.auto_rollback import should_auto_rollback
+from app.services.auto_rollback import is_debounced, should_auto_rollback
 from app.services.deployment_repository import DeploymentRepository
 from app.services.deployment_service import DeploymentService
 from app.services.notifier import (
@@ -78,14 +80,10 @@ async def deployment_webhook(request: Request) -> dict:
 
     payload = DeploymentWebhookPayload.model_validate_json(raw_body)
     if payload.status == DeploymentStatus.ROLLED_BACK:
-        raise AppError(
-            "invalid_status", "rolled_back 不接受外部上报", status_code=400
-        )
+        raise AppError("invalid_status", "rolled_back 不接受外部上报", status_code=400)
 
     async with request.app.state.db.session() as session:
-        service = await ServiceRepository(session).get_by_name_env(
-            payload.service, payload.env
-        )
+        service = await ServiceRepository(session).get_by_name_env(payload.service, payload.env)
         if service is None:
             raise AppError(
                 "service_not_found",
@@ -167,11 +165,7 @@ async def alert_webhook(request: Request, background: BackgroundTasks) -> dict:
         svc_repo = ServiceRepository(session)
         task_repo = TaskRepository(session)
         for item in payload.alerts:
-            status = (
-                AlertStatus.FIRING
-                if item.status.lower() == "firing"
-                else AlertStatus.RESOLVED
-            )
+            status = AlertStatus.FIRING if item.status.lower() == "firing" else AlertStatus.RESOLVED
             severity = _map_severity(item.labels.get("severity", "warning"))
             service_name = item.labels.get("service")
             await repo.upsert_from_alert(
@@ -206,6 +200,22 @@ async def alert_webhook(request: Request, background: BackgroundTasks) -> dict:
                 if env:
                     svc = await svc_repo.get_by_name_env(service_name, env)
                     if svc is not None:
+                        # 防抖(§6.3):同一 fingerprint 在防抖窗内已触发过回滚则跳过,
+                        # 避免抖动告警(firing→resolved→firing 反复)造成回滚风暴。
+                        since = datetime.now(UTC) - timedelta(
+                            seconds=settings.auto_rollback_debounce_sec
+                        )
+                        recent = await task_repo.recent_rollbacks_for_target(
+                            f"service:{svc.id}", since=since
+                        )
+                        recent_fps = {
+                            (t.payload or {}).get("fingerprint") for t in recent if t.payload
+                        }
+                        if is_debounced(
+                            fingerprint=item.fingerprint,
+                            recent_rollback_fingerprints=recent_fps,
+                        ):
+                            continue
                         task = await task_repo.create(
                             type=TaskType.ROLLBACK,
                             target=f"service:{svc.id}",

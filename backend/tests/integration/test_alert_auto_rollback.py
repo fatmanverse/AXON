@@ -66,29 +66,38 @@ async def _boot(app):
     async with db.session() as session:
         svc = await ServiceRepository(session).create_service(
             ServiceCreate(
-                name="billing", env=ServiceEnvironment.PROD,
-                runtime=Runtime.SYSTEMD, runtime_ref={"unit_name": "billing.service"},
+                name="billing",
+                env=ServiceEnvironment.PROD,
+                runtime=Runtime.SYSTEMD,
+                runtime_ref={"unit_name": "billing.service"},
             )
         )
         sid = svc.id
         repo = DeploymentRepository(session)
         dep = await repo.create(
-            service_id=sid, env="prod", source=DeploymentSource.UI_TRIGGERED,
-            version="v1", artifact="registry/app:v1",
+            service_id=sid,
+            env="prod",
+            source=DeploymentSource.UI_TRIGGERED,
+            version="v1",
+            artifact="registry/app:v1",
         )
         await repo.mark_status(dep.id, DeploymentStatus.SUCCESS)
     return sid
 
 
 def _alert_body(status="firing", severity="critical", service="billing", env="prod"):
-    return json.dumps({
-        "alerts": [{
-            "fingerprint": "fp-rb-1",
-            "status": status,
-            "labels": {"severity": severity, "service": service, "env": env},
-            "annotations": {"summary": "服务宕机"},
-        }]
-    }).encode()
+    return json.dumps(
+        {
+            "alerts": [
+                {
+                    "fingerprint": "fp-rb-1",
+                    "status": status,
+                    "labels": {"severity": severity, "service": service, "env": env},
+                    "annotations": {"summary": "服务宕机"},
+                }
+            ]
+        }
+    ).encode()
 
 
 def _headers(body: bytes):
@@ -159,3 +168,35 @@ async def test_no_rollback_for_warning(make_client):
     assert resp.status_code == 200
     rows = await _deployment_count(app, sid)
     assert len(rows) == 1
+
+
+async def test_debounce_skips_repeated_firing_same_fingerprint(make_client):
+    """同一 fingerprint 连续两次 firing(抖动),防抖只触发一次回滚(§6.3)。
+
+    第一次 POST 建 ROLLBACK task;第二次 POST 在防抖窗内查到同 fingerprint 的
+    task,跳过不再建。断言:两次上报后 ROLLBACK task 仅 1 条。"""
+    from app.models.task import TaskStatus, TaskType
+    from app.services.task_repository import TaskRepository
+
+    client, app, sid = await make_client(auto_rollback=True)
+    body = _alert_body()
+
+    r1 = await client.post("/api/webhooks/alert", content=body, headers=_headers(body))
+    assert r1.status_code == 200
+    assert r1.json()["data"]["auto_rollbacks"] == 1
+
+    # 同 fingerprint 再次 firing(抖动)
+    r2 = await client.post("/api/webhooks/alert", content=body, headers=_headers(body))
+    assert r2.status_code == 200
+    # 防抖命中:本次不再触发回滚
+    assert r2.json()["data"]["auto_rollbacks"] == 0
+
+    # 全局只建了一条 ROLLBACK task
+    db: Database = app.state.db
+    async with db.session() as session:
+        rollbacks = [
+            t
+            for t in await TaskRepository(session).list_by_status(TaskStatus.SUCCESS)
+            if t.type == TaskType.ROLLBACK
+        ]
+    assert len(rollbacks) == 1
