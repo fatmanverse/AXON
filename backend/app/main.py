@@ -30,6 +30,7 @@ from app.core.ratelimit import RateLimiter
 from app.core.secrets import build_secret_store
 from app.services.agent_connection import AgentConnectionManager
 from app.services.agent_grpc_server import AgentGrpcServer
+from app.services.k8s_client import build_k8s_api_factory
 from app.services.pipeline_provider import build_pipeline_provider
 
 
@@ -57,14 +58,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 settings.pipeline_config, app.state.secret_store
             )
 
+        # k8s client 工厂生产装配(T1.10/T3.6):k8s_enabled 时启动加载集群连接一次,
+        # 供 k8s 服务的生命周期动作与发布策略铺开使用;未开启则为 None(k8s 动作报 501)。
+        # 测试可预置 app.state.k8s_api_factory 覆写为 fake,故仅在未设置时装。
+        if not hasattr(app.state, "k8s_api_factory"):
+            app.state.k8s_api_factory = await build_k8s_api_factory(settings)
+
         # Agent gRPC server(T4.1,§15.5):按开关起。与 AgentGateway 共享同一
         # AgentConnectionManager(挂 app.state),命令下发与 ACK 回传才对得上。
         # 默认关闭(纯 SSH 部署);开启后 Agent 可主动外连建双向流。
         grpc_server: AgentGrpcServer | None = None
         if settings.agent_grpc_enabled:
-            manager = AgentConnectionManager(
-                heartbeat_timeout=settings.agent_heartbeat_timeout_sec
-            )
+            manager = AgentConnectionManager(heartbeat_timeout=settings.agent_heartbeat_timeout_sec)
             app.state.agent_connection_manager = manager
             grpc_server = AgentGrpcServer(
                 manager, host=settings.agent_grpc_host, port=settings.agent_grpc_port

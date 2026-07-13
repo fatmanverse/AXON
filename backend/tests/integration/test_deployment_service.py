@@ -96,9 +96,7 @@ async def test_deploy_triggers_pipeline_and_marks_success(db):
     async with db.session() as session:
         task = await TaskRepository(session).get(task_id)
         assert task.status == TaskStatus.SUCCESS
-        deployments = await DeploymentRepository(session).list_for_service(
-            service_id, env="prod"
-        )
+        deployments = await DeploymentRepository(session).list_for_service(service_id, env="prod")
     assert len(deployments) == 1
     dep = deployments[0]
     assert dep.status == DeploymentStatus.SUCCESS
@@ -125,9 +123,7 @@ async def test_deploy_marks_failed_when_trigger_raises(db):
         task = await TaskRepository(session).get(task_id)
         assert task.status == TaskStatus.FAILED
         assert task.error
-        deployments = await DeploymentRepository(session).list_for_service(
-            service_id, env="prod"
-        )
+        deployments = await DeploymentRepository(session).list_for_service(service_id, env="prod")
     assert deployments[0].status == DeploymentStatus.FAILED
 
 
@@ -154,9 +150,7 @@ async def test_deploy_records_previous_deployment_for_rollback_chain(db):
     )
 
     async with db.session() as session:
-        deployments = await DeploymentRepository(session).list_for_service(
-            service_id, env="prod"
-        )
+        deployments = await DeploymentRepository(session).list_for_service(service_id, env="prod")
     # 倒序:v2 在前
     assert deployments[0].version == "v2"
     assert deployments[0].previous_deployment_id == deployments[1].id
@@ -206,7 +200,7 @@ async def test_rollout_provider_executes_strategy_after_ci(db):
         async def scale(self, namespace: str, workload: str, replicas: int) -> None:
             calls.append(("scale", namespace, workload, replicas))
 
-    def _rollout_provider(svc):
+    async def _rollout_provider(svc):
         return RolloutContext(
             runtime=Runtime.K8S,
             k8s_adapter=_FakeK8s(),
@@ -260,7 +254,7 @@ async def test_rollout_strategy_failure_marks_deploy_failed(db):
         async def scale(self, namespace: str, workload: str, replicas: int) -> None:
             pass
 
-    def _rollout_provider(svc):
+    async def _rollout_provider(svc):
         return RolloutContext(
             runtime=Runtime.K8S,
             k8s_adapter=_FakeK8s(),
@@ -286,8 +280,6 @@ async def test_rollout_strategy_failure_marks_deploy_failed(db):
 
     async with db.session() as session:
         task = await TaskRepository(session).get(task_id)
-        deployments = await DeploymentRepository(session).list_for_service(
-            service_id, env="prod"
-        )
+        deployments = await DeploymentRepository(session).list_for_service(service_id, env="prod")
     assert task.status == TaskStatus.FAILED
     assert deployments[0].status == DeploymentStatus.FAILED

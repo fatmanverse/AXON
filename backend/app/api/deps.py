@@ -63,6 +63,30 @@ def get_health_checker(request: Request):
     return HealthChecker(prober=DefaultHealthProber())
 
 
+def get_k8s_api_factory(request: Request):
+    """k8s client 工厂(T1.10):k8s_enabled 时在 lifespan 加载,存于 app.state;
+    未启用为 None(对 k8s 服务的动作明确报 501)。测试可覆写 app.state.k8s_api_factory。"""
+    return getattr(request.app.state, "k8s_api_factory", None)
+
+
+def get_rollout_provider(request: Request):
+    """发布策略 RolloutContext 生产工厂(T3.6/T3.7)。按 service.runtime 现组装:
+    k8s 用 k8s_api_factory,裸机按 placement 建 executor。测试可经
+    app.state.rollout_provider 覆写为 fake;未接线时该 provider 为 None(仅触发 CI)。"""
+    existing = getattr(request.app.state, "rollout_provider", None)
+    if existing is not None:
+        return existing
+    from app.services.rollout_provider import build_rollout_provider
+
+    return build_rollout_provider(
+        request.app.state.db,
+        request.app.state.secret_store,
+        request.app.state.settings,
+        k8s_api_factory=getattr(request.app.state, "k8s_api_factory", None),
+        connector=getattr(request.app.state, "ssh_connector", None),
+    )
+
+
 async def get_current_claims(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     settings: Settings = Depends(get_settings),

@@ -106,6 +106,14 @@ class Settings(BaseSettings):
     # 生产由环境注入 YIMAI_PIPELINE_CONFIG='{"*":{"provider":"gitlab",...}}';
     # 缺省为空 → provider 恒返回 None,部署报"未配置 CI"而非 500。
     pipeline_config: dict[str, dict[str, str]] = {}
+    # k8s 生命周期/发布策略(T1.10/T3.6):对 runtime=k8s 的服务经 client 执行动作。
+    # 默认关闭——纯裸机部署无需 k8s client。开启后启动时加载一次连接配置(in-cluster
+    # 或 kubeconfig 文件),构造共享 AppsV1Api,供生命周期与发布策略铺开使用。
+    k8s_enabled: bool = False
+    k8s_in_cluster: bool = False  # True:用 Pod 内 ServiceAccount(控制面自身跑在集群里)
+    k8s_kubeconfig: str = ""  # 非 in-cluster 时的 kubeconfig 路径;空则用默认查找路径
+    k8s_default_replicas: int = 1  # start/scale 回的默认副本数(§14.2 副本不落库)
+
     # Agent gRPC server(T4.1,§15.5):Agent 主动外连的监听地址。enabled 关闭时
     # 不起 gRPC server(纯 SSH 部署,默认);开启后 Agent 可建双向流上报/收命令。
     agent_grpc_enabled: bool = False

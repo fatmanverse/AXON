@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import realtime
 from app.core.errors import AppError
 from app.models.deployment import (
     Deployment,
@@ -62,6 +63,7 @@ class DeploymentRepository:
         )
         self._session.add(deployment)
         await self._session.flush()
+        realtime.enqueue_deployment(deployment)
         return deployment
 
     async def get(self, deployment_id: str) -> Deployment:
@@ -81,9 +83,7 @@ class DeploymentRepository:
         result = await self._session.execute(stmt)
         return result.scalars().all()
 
-    async def list_recent(
-        self, *, env: str | None = None, limit: int = 20
-    ) -> Sequence[Deployment]:
+    async def list_recent(self, *, env: str | None = None, limit: int = 20) -> Sequence[Deployment]:
         """跨 service 列出最近部署,最新在前(供主页 Dashboard 的部署 feed,§9.2)。"""
         stmt = select(Deployment)
         if env is not None:
@@ -92,9 +92,7 @@ class DeploymentRepository:
         result = await self._session.execute(stmt)
         return result.scalars().all()
 
-    async def mark_status(
-        self, deployment_id: str, status: DeploymentStatus
-    ) -> Deployment:
+    async def mark_status(self, deployment_id: str, status: DeploymentStatus) -> Deployment:
         """流转部署状态。经状态机守卫:非法流转抛 ValueError;落终态盖 finished_at。"""
         deployment = await self.get(deployment_id)
         ensure_transition(deployment.status, status)
@@ -102,6 +100,7 @@ class DeploymentRepository:
         if status.is_terminal():
             deployment.finished_at = datetime.now(UTC)
         await self._session.flush()
+        realtime.enqueue_deployment(deployment)
         return deployment
 
     async def list_running(self, *, limit: int = 200) -> Sequence[Deployment]:
@@ -119,9 +118,7 @@ class DeploymentRepository:
         result = await self._session.execute(stmt)
         return result.scalars().all()
 
-    async def latest_successful(
-        self, service_id: str, *, env: str
-    ) -> Deployment | None:
+    async def latest_successful(self, service_id: str, *, env: str) -> Deployment | None:
         """查该 service+env 最近一次成功部署(回滚取其 artifact 作上一版)。"""
         stmt = (
             select(Deployment)
@@ -189,6 +186,7 @@ class DeploymentRepository:
             )
             self._session.add(deployment)
             await self._session.flush()
+            realtime.enqueue_deployment(deployment)
             return deployment
 
         # 乱序保护:后到事件的 finished_at 早于已记录的,判为过期,整条丢弃。
@@ -215,4 +213,5 @@ class DeploymentRepository:
         if finished_at is not None:
             existing.finished_at = finished_at
         await self._session.flush()
+        realtime.enqueue_deployment(existing)
         return existing

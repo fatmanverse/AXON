@@ -18,7 +18,9 @@ from app.api.deps import (
     get_current_user,
     get_database,
     get_health_checker,
+    get_k8s_api_factory,
     get_pipeline_adapter_provider,
+    get_rollout_provider,
     get_secret_store,
     get_session,
     get_ssh_connector,
@@ -154,6 +156,7 @@ async def _accept_action(
     db: Database,
     secrets: SecretStore,
     connector,
+    k8s_api_factory,
     background: BackgroundTasks,
     user: User,
 ) -> dict:
@@ -184,7 +187,9 @@ async def _accept_action(
         ua=request.headers.get("user-agent"),
     )
 
-    lifecycle = LifecycleService(db, secrets, connector=connector)
+    # k8s_api_factory 注入后 k8s 服务的生命周期动作走真实 client(T1.10 生产接线);
+    # 未注入(纯裸机/未开启 k8s)时对 k8s 服务动作明确报 501,不静默。
+    lifecycle = LifecycleService(db, secrets, connector=connector, k8s_api_factory=k8s_api_factory)
     background.add_task(lifecycle.run_action, task_id=task_id, service_id=service_id, action=action)
 
     accepted = TaskAccepted(task_id=task_id, status=task.status)
@@ -200,6 +205,7 @@ async def _handle(
     db: Database,
     secrets: SecretStore,
     connector,
+    k8s_api_factory,
     user: User,
 ) -> dict:
     return await _accept_action(
@@ -210,6 +216,7 @@ async def _handle(
         db=db,
         secrets=secrets,
         connector=connector,
+        k8s_api_factory=k8s_api_factory,
         background=background,
         user=user,
     )
@@ -224,10 +231,20 @@ async def start_service(
     db: Database = Depends(get_database),
     secrets: SecretStore = Depends(get_secret_store),
     connector=Depends(get_ssh_connector),
+    k8s_api_factory=Depends(get_k8s_api_factory),
     user: User = Depends(get_current_user),
 ) -> dict:
     return await _handle(
-        service_id, TaskType.START, request, background, session, db, secrets, connector, user
+        service_id,
+        TaskType.START,
+        request,
+        background,
+        session,
+        db,
+        secrets,
+        connector,
+        k8s_api_factory,
+        user,
     )
 
 
@@ -240,10 +257,20 @@ async def stop_service(
     db: Database = Depends(get_database),
     secrets: SecretStore = Depends(get_secret_store),
     connector=Depends(get_ssh_connector),
+    k8s_api_factory=Depends(get_k8s_api_factory),
     user: User = Depends(get_current_user),
 ) -> dict:
     return await _handle(
-        service_id, TaskType.STOP, request, background, session, db, secrets, connector, user
+        service_id,
+        TaskType.STOP,
+        request,
+        background,
+        session,
+        db,
+        secrets,
+        connector,
+        k8s_api_factory,
+        user,
     )
 
 
@@ -256,10 +283,20 @@ async def restart_service(
     db: Database = Depends(get_database),
     secrets: SecretStore = Depends(get_secret_store),
     connector=Depends(get_ssh_connector),
+    k8s_api_factory=Depends(get_k8s_api_factory),
     user: User = Depends(get_current_user),
 ) -> dict:
     return await _handle(
-        service_id, TaskType.RESTART, request, background, session, db, secrets, connector, user
+        service_id,
+        TaskType.RESTART,
+        request,
+        background,
+        session,
+        db,
+        secrets,
+        connector,
+        k8s_api_factory,
+        user,
     )
 
 
@@ -272,10 +309,20 @@ async def delete_service(
     db: Database = Depends(get_database),
     secrets: SecretStore = Depends(get_secret_store),
     connector=Depends(get_ssh_connector),
+    k8s_api_factory=Depends(get_k8s_api_factory),
     user: User = Depends(get_current_user),
 ) -> dict:
     return await _handle(
-        service_id, TaskType.DELETE, request, background, session, db, secrets, connector, user
+        service_id,
+        TaskType.DELETE,
+        request,
+        background,
+        session,
+        db,
+        secrets,
+        connector,
+        k8s_api_factory,
+        user,
     )
 
 
@@ -290,6 +337,7 @@ async def _start_deploy(
     provider,
     operator: str,
     health_checker=None,
+    rollout_provider=None,
 ) -> str:
     """建 deploy task + 写审计 + 调度异步部署编排,返回 task_id。
 
@@ -313,7 +361,12 @@ async def _start_deploy(
         ip=request.client.host if request.client else None,
         ua=request.headers.get("user-agent"),
     )
-    deployer = DeploymentService(db, adapter_provider=provider, health_checker=health_checker)
+    deployer = DeploymentService(
+        db,
+        adapter_provider=provider,
+        health_checker=health_checker,
+        rollout_provider=rollout_provider,
+    )
     background.add_task(
         deployer.run_deploy,
         task_id=task_id,
@@ -334,6 +387,7 @@ async def deploy_service(
     db: Database = Depends(get_database),
     provider=Depends(get_pipeline_adapter_provider),
     health_checker=Depends(get_health_checker),
+    rollout_provider=Depends(get_rollout_provider),
     user: User = Depends(get_current_user),
 ) -> dict:
     """UI 触发部署(§8.1 模式 A):落 deploy task 与 deployment 记录,异步调 CI。
@@ -397,6 +451,7 @@ async def deploy_service(
         provider=provider,
         operator=user.username,
         health_checker=health_checker,
+        rollout_provider=rollout_provider,
     )
     accepted = TaskAccepted(task_id=task_id, status=TaskStatus.PENDING)
     return ok(accepted.model_dump())
@@ -481,9 +536,7 @@ async def promote_service(
             status_code=400,
         )
     if source.env == target.env:
-        raise AppError(
-            "promote_same_env", "晋升的源与目标环境不能相同", status_code=400
-        )
+        raise AppError("promote_same_env", "晋升的源与目标环境不能相同", status_code=400)
 
     task = await TaskRepository(session).create(
         type=TaskType.DEPLOY,

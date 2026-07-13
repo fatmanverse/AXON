@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import realtime
 from app.core.errors import AppError
 from app.models.task import Task, TaskStatus, TaskType, ensure_transition
 
@@ -42,6 +43,7 @@ class TaskRepository:
         ensure_transition(task.status, TaskStatus.RUNNING)
         task.status = TaskStatus.RUNNING
         await self._session.flush()
+        realtime.enqueue_task(task)
         return task
 
     async def mark_result(
@@ -62,4 +64,5 @@ class TaskRepository:
         if status.is_terminal() or status == TaskStatus.UNKNOWN:
             task.finished_at = datetime.now(UTC)
         await self._session.flush()
+        realtime.enqueue_task(task)
         return task

@@ -11,6 +11,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import realtime
 from app.models.alert import Alert, AlertSeverity, AlertStatus
 
 
@@ -32,9 +33,7 @@ class AlertRepository:
     ) -> Alert:
         """按 fingerprint 幂等 upsert。首次插入;重复上报更新状态与摘要。"""
         existing = (
-            await self._session.execute(
-                select(Alert).where(Alert.fingerprint == fingerprint)
-            )
+            await self._session.execute(select(Alert).where(Alert.fingerprint == fingerprint))
         ).scalar_one_or_none()
 
         if existing is not None:
@@ -48,6 +47,7 @@ class AlertRepository:
             if resolved_at is not None:
                 existing.resolved_at = resolved_at
             await self._session.flush()
+            realtime.enqueue_alert(existing)
             return existing
 
         alert = Alert(
@@ -62,6 +62,7 @@ class AlertRepository:
         )
         self._session.add(alert)
         await self._session.flush()
+        realtime.enqueue_alert(alert)
         return alert
 
     async def list_alerts(

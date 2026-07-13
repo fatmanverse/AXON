@@ -22,6 +22,7 @@ from app.api.deps import (
     get_database,
     get_health_checker,
     get_pipeline_adapter_provider,
+    get_rollout_provider,
     get_session,
 )
 from app.core.db import Database
@@ -73,6 +74,7 @@ async def approve(
     db: Database = Depends(get_database),
     provider=Depends(get_pipeline_adapter_provider),
     health_checker=Depends(get_health_checker),
+    rollout_provider=Depends(get_rollout_provider),
     user: User = Depends(get_current_user),
 ) -> dict:
     """批准一条待审批的高危操作,建 task 执行原动作(当前支持 deploy)。
@@ -122,7 +124,10 @@ async def approve(
     )
 
     deployer = DeploymentService(
-        db, adapter_provider=provider, health_checker=health_checker
+        db,
+        adapter_provider=provider,
+        health_checker=health_checker,
+        rollout_provider=rollout_provider,
     )
     background.add_task(
         deployer.run_deploy,

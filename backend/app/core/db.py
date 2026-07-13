@@ -40,16 +40,29 @@ class Database:
 
     @asynccontextmanager
     async def session(self) -> AsyncIterator[AsyncSession]:
-        """事务边界:块正常结束提交,抛异常回滚,始终关闭会话。"""
+        """事务边界:块正常结束提交,抛异常回滚,始终关闭会话。
+
+        实时推送(T0.10):repo 层把待推消息暂存到本会话 outbox;仅在 commit 成功后
+        才 flush 到 WebSocket Hub(未提交/回滚的状态不外泄给前端)。flush 自身吞异常,
+        绝不影响业务写。
+        """
+        from app.core import realtime
+
         session = self._sessionmaker()
+        token = realtime.open_outbox()
+        committed = False
         try:
             yield session
             await session.commit()
+            committed = True
         except Exception:
             await session.rollback()
             raise
         finally:
+            pending = realtime.reset_outbox(token)
             await session.close()
+            if committed:
+                await realtime.flush(pending)
 
     async def ping(self) -> bool:
         """DB 探活:健康检查用,连不通返回 False。"""
