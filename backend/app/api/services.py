@@ -59,7 +59,7 @@ from app.services.deployment_repository import DeploymentRepository
 from app.services.deployment_service import DeploymentService, DeployRequest
 from app.services.executor_factory import build_executor_for_server
 from app.services.lifecycle_service import LifecycleService
-from app.services.quality_gate import check_quality_gate
+from app.services.quality_gate import QualityGateBlocked, check_quality_gate
 from app.services.scan_result_repository import ScanResultRepository
 from app.services.service_config_repository import ServiceConfigRepository
 from app.services.service_repository import ServiceRepository
@@ -478,12 +478,35 @@ async def deploy_service(
     service = await ServiceRepository(session).get_service(service_id)
     _require_service_permission(user, service, TaskType.DEPLOY)
 
-    # 部署前质量门禁(§7.2):带 git_sha 且策略开启时,存在 critical 拦截(422)
-    await check_quality_gate(
-        ScanResultRepository(session),
-        git_sha=body.git_sha,
-        block_on_critical=request.app.state.settings.deploy_block_on_critical,
-    )
+    # 部署前质量门禁(§7.2):带 git_sha 且策略开启时,存在 critical 拦截(422)。
+    # 拦截也要留痕(§7.2「门禁结果写审计」):记一条 FAILED 审计后再上抛,使"谁在
+    # 什么时候被门禁挡下、挡了几个 critical"可追溯,而非静默 422。
+    try:
+        await check_quality_gate(
+            ScanResultRepository(session),
+            git_sha=body.git_sha,
+            block_on_critical=request.app.state.settings.deploy_block_on_critical,
+        )
+    except QualityGateBlocked as blocked:
+        # 审计需独立会话提交:请求会话在上抛 422 时整体回滚,写在其中的审计会随之
+        # 丢失。故另起一个会话写门禁拦截审计并提交,再上抛拦截异常。
+        async with db.session() as audit_session:
+            await AuditService(audit_session).record(
+                actor=user.username,
+                action="service.deploy.blocked",
+                target=f"service:{service_id}",
+                env=service.env.value,
+                result=AuditResult.FAILED,
+                after={
+                    "git_sha": body.git_sha,
+                    "version": body.version,
+                    "blocking": blocked.blocking,
+                    "reason": blocked.message,
+                },
+                ip=request.client.host if request.client else None,
+                ua=request.headers.get("user-agent"),
+            )
+        raise
 
     # 生产审批流(§10.2/§13):prod 高危操作在开关开启时不直接执行,先落 pending
     # 审批,返回审批 id;具 approval 权限者批准后才建 task 执行(见 approvals API)。

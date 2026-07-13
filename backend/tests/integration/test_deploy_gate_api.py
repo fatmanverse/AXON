@@ -88,9 +88,7 @@ async def _seed_scan(app, git_sha, critical):
 
 
 async def _token(client):
-    resp = await client.post(
-        "/api/auth/login", json={"username": "operator", "password": "op-pw"}
-    )
+    resp = await client.post("/api/auth/login", json={"username": "operator", "password": "op-pw"})
     return resp.json()["data"]["access_token"]
 
 
@@ -134,3 +132,33 @@ async def test_deploy_passes_without_git_sha(app_client):
         json={"version": "v1"},
     )
     assert resp.status_code == 202
+
+
+async def test_blocked_deploy_writes_audit(app_client):
+    """门禁拦截也要留痕(§7.2):被 critical 挡下时落一条 service.deploy.blocked
+    审计(FAILED),记录 git_sha 与被挡的 critical 数——即使 deploy 请求会话因 422
+    回滚,审计仍独立提交,不随之丢失。"""
+    from app.models.audit import AuditResult
+    from app.services.audit_service import AuditService
+
+    client, _, app = app_client
+    service_id = await _seed_service(app)
+    await _seed_scan(app, "sha-bad", critical=2)
+    token = await _token(client)
+
+    resp = await client.post(
+        f"/api/services/{service_id}/deploy",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"version": "v1", "git_sha": "sha-bad"},
+    )
+    assert resp.status_code == 422
+
+    db: Database = app.state.db
+    async with db.session() as session:
+        rows = await AuditService(session).search(action="service.deploy.blocked")
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.result == AuditResult.FAILED
+    assert row.target == f"service:{service_id}"
+    assert row.after["git_sha"] == "sha-bad"
+    assert row.after["blocking"]["critical"] == 2
