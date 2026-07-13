@@ -178,3 +178,89 @@ async def test_update_config_writes_content_verbatim_even_with_delimiter():
     assert match, f"命令应含 base64 载荷: {command}"
     decoded = base64.b64decode(match.group(1)).decode()
     assert decoded == content
+
+
+class _FlakyConnector:
+    """前 fail_times 次建连(__aenter__)抛错,之后成功。用于验证建连重试。"""
+
+    def __init__(self, *, fail_times: int, exc: Exception | None = None) -> None:
+        self.fail_times = fail_times
+        self.exc = exc or OSError("connection refused")
+        self.enter_calls = 0
+        self.conn = FakeConnection()
+
+    def __call__(self, **_):
+        return self
+
+    async def __aenter__(self):
+        self.enter_calls += 1
+        if self.enter_calls <= self.fail_times:
+            raise self.exc
+        return self.conn
+
+    async def __aexit__(self, *exc):
+        return None
+
+
+def _retry_target(cred_id: str, *, retries: int) -> SSHTarget:
+    # retry_backoff=0 让测试无需真实等待
+    return SSHTarget(
+        host="10.0.0.5",
+        port=22,
+        username="ops",
+        credential_id=cred_id,
+        max_connect_retries=retries,
+        retry_backoff=0.0,
+    )
+
+
+async def test_connect_retries_then_succeeds():
+    """建连前两次失败、第三次成功:在 max_connect_retries=2 下最终成功执行。"""
+    store, cred_id = _store_with_key()
+    connector = _FlakyConnector(fail_times=2)
+    executor = SSHExecutor(_retry_target(cred_id, retries=2), store, connector=connector)
+
+    result = await executor.exec("uptime")
+
+    assert result.succeeded is True
+    assert connector.enter_calls == 3  # 2 次失败 + 1 次成功
+
+
+async def test_connect_retries_exhausted_raises():
+    """建连始终失败:重试用尽后抛 AppError(502),尝试次数 = 1 + max_connect_retries。"""
+    store, cred_id = _store_with_key()
+    connector = _FlakyConnector(fail_times=99)
+    executor = SSHExecutor(_retry_target(cred_id, retries=2), store, connector=connector)
+
+    with pytest.raises(AppError, match="连接失败"):
+        await executor.exec("uptime")
+
+    assert connector.enter_calls == 3  # 1 + 2 retries
+
+
+async def test_command_timeout_not_retried():
+    """命令阶段超时(连接已建立)不重试:只尝试一次建连,直接 504。"""
+    store, cred_id = _store_with_key()
+    connector = _FlakyConnector(fail_times=0)  # 建连总成功
+    connector.conn = FakeConnection(delay=0.2)  # 命令跑得慢 → 超时
+    executor = SSHExecutor(_retry_target(cred_id, retries=3), store, connector=connector)
+
+    with pytest.raises(AppError, match="超时"):
+        await executor.exec("sleep 10", timeout=0.01)
+
+    assert connector.enter_calls == 1  # 命令超时不触发建连重试
+
+
+async def test_nonzero_exit_not_retried():
+    """命令非零退出不是异常、不重试:只建连一次,返回失败结果。"""
+    store, cred_id = _store_with_key()
+    connector = _FlakyConnector(fail_times=0)
+    connector.conn = FakeConnection(
+        results={"false": FakeProcess(exit_status=1, stdout="", stderr="boom")}
+    )
+    executor = SSHExecutor(_retry_target(cred_id, retries=3), store, connector=connector)
+
+    result = await executor.exec("false")
+
+    assert result.succeeded is False
+    assert connector.enter_calls == 1

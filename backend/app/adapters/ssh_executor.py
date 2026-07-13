@@ -40,6 +40,10 @@ class SSHTarget:
     username: str
     credential_id: str
     connect_timeout: float = 10.0
+    # 建连重试(§5.1):瞬时网络抖动/对端未就绪时,按退避重试建连。
+    # 仅重试「建立连接」阶段,不重试命令执行——命令可能已部分执行,盲目重跑不幂等。
+    max_connect_retries: int = 2  # 首次失败后额外重试次数(总尝试 = 1 + 该值)
+    retry_backoff: float = 0.5  # 退避基数(秒),第 n 次重试前等待 backoff * 2**(n-1)
 
 
 def _default_connector(**kwargs: Any) -> Any:
@@ -77,11 +81,7 @@ class SSHExecutor(Executor):
     async def exec(self, command: str, *, timeout: float | None = None) -> CommandResult:
         effective_timeout = timeout if timeout is not None else DEFAULT_TIMEOUT
         try:
-            async with self._connect() as conn:
-                process = await asyncio.wait_for(
-                    conn.run(command, timeout=effective_timeout),
-                    timeout=effective_timeout,
-                )
+            process = await self._run_with_connect_retry(command, effective_timeout)
         except TimeoutError as exc:
             log.warning("ssh_exec_timeout", host=self._target.host, command=command)
             raise AppError(
@@ -108,6 +108,66 @@ class SSHExecutor(Executor):
             stdout=process.stdout or "",
             stderr=process.stderr or "",
         )
+
+    async def _run_with_connect_retry(self, command: str, effective_timeout: float) -> Any:
+        """按退避重试「建立连接」阶段,连上后执行命令(命令阶段不重试)。
+
+        只有建连失败(对端未就绪/网络抖动)才重试——命令一旦下发可能已部分执行,
+        盲目重跑不幂等,故命令执行异常与超时直接上抛。TimeoutError 视为命令阶段
+        失败,不在此重试(由上层判 504)。
+        """
+        attempts = self._target.max_connect_retries + 1
+        last_exc: Exception | None = None
+        for attempt in range(attempts):
+            try:
+                conn_ctx = self._connect()
+            except Exception as exc:  # 极少数 connector 同步抛(如取私钥失败),按建连失败处理
+                last_exc = exc
+                await self._backoff_before_retry(attempt, exc)
+                continue
+
+            # 进入上下文(建立连接)阶段可重试;进入成功后命令阶段不再重试。
+            try:
+                conn = await conn_ctx.__aenter__()
+            except TimeoutError:
+                raise
+            except Exception as exc:
+                last_exc = exc
+                await self._backoff_before_retry(attempt, exc)
+                continue
+
+            try:
+                return await asyncio.wait_for(
+                    conn.run(command, timeout=effective_timeout),
+                    timeout=effective_timeout,
+                )
+            finally:
+                await conn_ctx.__aexit__(None, None, None)
+
+        # 重试用尽仍失败:抛明确的连接失败 AppError(502),消息如实反映是建连而非
+        # 命令执行失败——不裸抛 last_exc,否则被 exec 的通用 except 误分类为"命令执行失败"。
+        assert last_exc is not None
+        raise AppError(
+            "ssh_error",
+            f"SSH 连接失败(重试 {self._target.max_connect_retries} 次后仍失败): {last_exc}",
+            status_code=502,
+        ) from last_exc
+
+    async def _backoff_before_retry(self, attempt: int, exc: Exception) -> None:
+        """建连第 attempt 次(0-based)失败后,若还有重试机会则退避等待。"""
+        remaining = self._target.max_connect_retries - attempt
+        if remaining <= 0:
+            return
+        wait = self._target.retry_backoff * (2**attempt)
+        log.info(
+            "ssh_connect_retry",
+            host=self._target.host,
+            attempt=attempt + 1,
+            error_type=type(exc).__name__,
+            wait=wait,
+        )
+        if wait > 0:
+            await asyncio.sleep(wait)
 
     async def deploy(self, spec: DeploySpec) -> CommandResult:
         # 裸机部署的 MVP 形态:拉取/切换制品的命令由 runtime 适配层细化(T1.7/1.8)。
