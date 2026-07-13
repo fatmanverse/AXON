@@ -63,6 +63,13 @@ def get_health_checker(request: Request):
     return HealthChecker(prober=DefaultHealthProber())
 
 
+def get_agent_registry(request: Request):
+    """AgentGateway 注册表(T4.3):agent_grpc_enabled 时在 lifespan 构造,存于
+    app.state;未启用为 None(access_mode=agent 的动作退回 501 占位)。测试可覆写
+    app.state.agent_gateway_registry。"""
+    return getattr(request.app.state, "agent_gateway_registry", None)
+
+
 def get_k8s_api_factory(request: Request):
     """k8s client 工厂(T1.10):k8s_enabled 时在 lifespan 加载,存于 app.state;
     未启用为 None(对 k8s 服务的动作明确报 501)。测试可覆写 app.state.k8s_api_factory。"""

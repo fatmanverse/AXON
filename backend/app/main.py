@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.adapters.agent_gateway_registry import AgentGatewayRegistry
 from app.api import (
     alerts,
     approvals,
@@ -71,6 +72,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if settings.agent_grpc_enabled:
             manager = AgentConnectionManager(heartbeat_timeout=settings.agent_heartbeat_timeout_sec)
             app.state.agent_connection_manager = manager
+            # AgentGateway 注册表(T4.3):按 agent_id 复用 gateway,避免每次动作重复
+            # 注册 manager 回调导致内存泄漏。access_mode=agent 的服务器动作经此走真实
+            # 命令下发路径(替换 T1.5 占位)。仅 gRPC 开启时才有,纯 SSH 部署为 None。
+            if not hasattr(app.state, "agent_gateway_registry"):
+                app.state.agent_gateway_registry = AgentGatewayRegistry(
+                    manager, ack_timeout=settings.agent_heartbeat_timeout_sec
+                )
             grpc_server = AgentGrpcServer(
                 manager, host=settings.agent_grpc_host, port=settings.agent_grpc_port
             )

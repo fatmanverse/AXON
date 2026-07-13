@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from app.adapters.agent_gateway_registry import AgentGatewayRegistry
 from app.adapters.executor import Executor
 from app.adapters.k8s_runtime import AppsV1ApiLike, K8sRuntime
 from app.adapters.runtime_registry import SSH_RUNTIMES
@@ -56,6 +57,7 @@ class LifecycleService:
         *,
         connector: Callable[..., Any] | None = None,
         k8s_api_factory: Callable[[], AppsV1ApiLike] | None = None,
+        agent_registry: AgentGatewayRegistry | None = None,
     ) -> None:
         self._db = db
         self._secrets = secrets
@@ -63,6 +65,9 @@ class LifecycleService:
         # k8s 走 client 而非 SSH;生产按需构造真实 AppsV1Api,测试注入 fake。
         # 缺省为 None:未配置 k8s client 时对 k8s 服务的动作会明确报错而非静默。
         self._k8s_api_factory = k8s_api_factory
+        # agent 模式:注入注册表后 agent 服务器动作走真实 AgentGateway(§5.3);
+        # 未注入(纯 SSH/未开 gRPC)时退回占位,agent 动作明确报 501,不影响 SSH。
+        self._agent_registry = agent_registry
 
     async def run_action(self, *, task_id: str, service_id: str, action: TaskType) -> None:
         """执行一次生命周期动作。全程不抛:结果落在 task 状态上。"""
@@ -123,7 +128,12 @@ class LifecycleService:
 
     def _build_executor(self, server: Server | None) -> Executor:
         """按 server.access_mode 选择执行器(共享工厂,与配置下发一致)。"""
-        return build_executor_for_server(server, self._secrets, connector=self._connector)
+        return build_executor_for_server(
+            server,
+            self._secrets,
+            connector=self._connector,
+            agent_registry=self._agent_registry,
+        )
 
     async def _dispatch(
         self,

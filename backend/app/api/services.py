@@ -15,6 +15,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
+    get_agent_registry,
     get_current_user,
     get_database,
     get_health_checker,
@@ -157,6 +158,7 @@ async def _accept_action(
     secrets: SecretStore,
     connector,
     k8s_api_factory,
+    agent_registry,
     background: BackgroundTasks,
     user: User,
 ) -> dict:
@@ -189,7 +191,15 @@ async def _accept_action(
 
     # k8s_api_factory 注入后 k8s 服务的生命周期动作走真实 client(T1.10 生产接线);
     # 未注入(纯裸机/未开启 k8s)时对 k8s 服务动作明确报 501,不静默。
-    lifecycle = LifecycleService(db, secrets, connector=connector, k8s_api_factory=k8s_api_factory)
+    # agent_registry 注入后 agent 模式服务器动作走真实 AgentGateway(T4.3);
+    # 未注入(纯 SSH/未开 gRPC)时退回占位报 501,不影响 SSH 路径。
+    lifecycle = LifecycleService(
+        db,
+        secrets,
+        connector=connector,
+        k8s_api_factory=k8s_api_factory,
+        agent_registry=agent_registry,
+    )
     background.add_task(lifecycle.run_action, task_id=task_id, service_id=service_id, action=action)
 
     accepted = TaskAccepted(task_id=task_id, status=task.status)
@@ -206,6 +216,7 @@ async def _handle(
     secrets: SecretStore,
     connector,
     k8s_api_factory,
+    agent_registry,
     user: User,
 ) -> dict:
     return await _accept_action(
@@ -217,6 +228,7 @@ async def _handle(
         secrets=secrets,
         connector=connector,
         k8s_api_factory=k8s_api_factory,
+        agent_registry=agent_registry,
         background=background,
         user=user,
     )
@@ -232,6 +244,7 @@ async def start_service(
     secrets: SecretStore = Depends(get_secret_store),
     connector=Depends(get_ssh_connector),
     k8s_api_factory=Depends(get_k8s_api_factory),
+    agent_registry=Depends(get_agent_registry),
     user: User = Depends(get_current_user),
 ) -> dict:
     return await _handle(
@@ -244,6 +257,7 @@ async def start_service(
         secrets,
         connector,
         k8s_api_factory,
+        agent_registry,
         user,
     )
 
@@ -258,6 +272,7 @@ async def stop_service(
     secrets: SecretStore = Depends(get_secret_store),
     connector=Depends(get_ssh_connector),
     k8s_api_factory=Depends(get_k8s_api_factory),
+    agent_registry=Depends(get_agent_registry),
     user: User = Depends(get_current_user),
 ) -> dict:
     return await _handle(
@@ -270,6 +285,7 @@ async def stop_service(
         secrets,
         connector,
         k8s_api_factory,
+        agent_registry,
         user,
     )
 
@@ -284,6 +300,7 @@ async def restart_service(
     secrets: SecretStore = Depends(get_secret_store),
     connector=Depends(get_ssh_connector),
     k8s_api_factory=Depends(get_k8s_api_factory),
+    agent_registry=Depends(get_agent_registry),
     user: User = Depends(get_current_user),
 ) -> dict:
     return await _handle(
@@ -296,6 +313,7 @@ async def restart_service(
         secrets,
         connector,
         k8s_api_factory,
+        agent_registry,
         user,
     )
 
@@ -310,6 +328,7 @@ async def delete_service(
     secrets: SecretStore = Depends(get_secret_store),
     connector=Depends(get_ssh_connector),
     k8s_api_factory=Depends(get_k8s_api_factory),
+    agent_registry=Depends(get_agent_registry),
     user: User = Depends(get_current_user),
 ) -> dict:
     return await _handle(
@@ -322,6 +341,7 @@ async def delete_service(
         secrets,
         connector,
         k8s_api_factory,
+        agent_registry,
         user,
     )
 
@@ -709,6 +729,7 @@ async def apply_config_version(
     db: Database = Depends(get_database),
     secrets: SecretStore = Depends(get_secret_store),
     connector=Depends(get_ssh_connector),
+    agent_registry=Depends(get_agent_registry),
     user: User = Depends(get_current_user),
 ) -> dict:
     """下发指定配置版本到该服务各放置点(§15.3)。异步落 UPDATE_CONFIG task,逐目标
@@ -741,7 +762,7 @@ async def apply_config_version(
         db,
         secrets,
         executor_builder=lambda server: build_executor_for_server(
-            server, secrets, connector=connector
+            server, secrets, connector=connector, agent_registry=agent_registry
         ),
     )
     background.add_task(
