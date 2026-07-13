@@ -241,7 +241,9 @@ async def alert_webhook(request: Request, background: BackgroundTasks) -> dict:
 
     # 后台推送 firing 告警通知(§13):通知是旁路,失败不影响 webhook 已成功落库。
     # 未配置渠道时 build_notifier 返回 NoopNotifier,notify 恒成功不发请求。
-    notifier = build_notifier(settings.notify_webhook_url)
+    # 注意:build_notifier 取的是 settings 对象(内部读 notify_webhook_url 属性),
+    # 传字符串会导致 getattr 恒失败退化成 NoopNotifier(告警永远发不出)。
+    notifier = build_notifier(settings)
     for message in notifications:
         background.add_task(notifier.notify, message)
 

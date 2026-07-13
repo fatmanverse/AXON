@@ -59,6 +59,7 @@ from app.services.deployment_repository import DeploymentRepository
 from app.services.deployment_service import DeploymentService, DeployRequest
 from app.services.executor_factory import build_executor_for_server
 from app.services.lifecycle_service import LifecycleService
+from app.services.notifier import build_notifier, format_deploy_message
 from app.services.quality_gate import QualityGateBlocked, check_quality_gate
 from app.services.scan_result_repository import ScanResultRepository
 from app.services.service_config_repository import ServiceConfigRepository
@@ -201,6 +202,18 @@ async def _accept_action(
         agent_registry=agent_registry,
     )
     background.add_task(lifecycle.run_action, task_id=task_id, service_id=service_id, action=action)
+
+    # 关键操作通知(§13):仅 delete 属高危关键动作,prod 时推送 IM;start/stop/restart
+    # 为高频常规运维,不打扰值班。通知是旁路,未配渠道时静默。
+    if action == TaskType.DELETE:
+        _notify_key_operation(
+            request=request,
+            background=background,
+            service=service,
+            version=service.desired_version or "",
+            operator=user.username,
+            action="删除",
+        )
 
     accepted = TaskAccepted(task_id=task_id, status=task.status)
     return ok(accepted.model_dump())
@@ -361,6 +374,34 @@ async def delete_service(
     )
 
 
+def _notify_key_operation(
+    *,
+    request: Request,
+    background: BackgroundTasks,
+    service: Service,
+    action: str,
+    version: str,
+    operator: str,
+) -> None:
+    """prod 关键操作(部署/删除/回滚)推送 IM 通知(§13 通知触达)。
+
+    通知是旁路:未配置渠道时 build_notifier 返回 NoopNotifier(静默不发),后台任务
+    执行,失败只记日志不阻断主流程。只对 prod 通知——dev/staging 高频操作不打扰值班。
+    """
+    settings = request.app.state.settings
+    if service.env != ServiceEnvironment.PROD:
+        return
+    notifier = build_notifier(settings)
+    message = format_deploy_message(
+        service=service.name,
+        env=service.env.value,
+        version=version,
+        operator=operator,
+        action=action,
+    )
+    background.add_task(notifier.notify, message)
+
+
 async def _maybe_create_prod_approval(
     *,
     service: Service,
@@ -446,6 +487,14 @@ async def _start_deploy(
         service_id=service.id,
         request=DeployRequest(version=body.version, strategy=body.strategy, git_sha=body.git_sha),
         operator=operator,
+    )
+    _notify_key_operation(
+        request=request,
+        background=background,
+        service=service,
+        version=body.version,
+        operator=operator,
+        action="部署",
     )
     return task_id
 
@@ -597,6 +646,14 @@ async def rollback_service(
         task_id=task_id,
         service_id=service_id,
         operator=user.username,
+    )
+    _notify_key_operation(
+        request=request,
+        background=background,
+        service=service,
+        version="(上一版)",
+        operator=user.username,
+        action="回滚",
     )
 
     accepted = TaskAccepted(task_id=task_id, status=task.status)
