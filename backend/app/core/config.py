@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     rate_limit_capacity: int = 120  # 桶容量(突发上限)
     rate_limit_refill_per_sec: float = 20.0  # 每秒补充速率(稳态 QPS)
     rate_limit_retry_after: int = 1  # 429 响应的 Retry-After 秒数
+    # 限流豁免路径前缀(T0.12):webhook 走自身 HMAC 鉴权(§8.3),CI/扫描器/Alertmanager
+    # 的正常突发上报不应被用户级 IP 限流误伤;命中任一前缀的请求跳过限流。
+    rate_limit_exempt_prefixes: list[str] = ["/api/webhooks"]
+    # 请求体大小上限(T0.12,字节):超限返回 413,防超大请求体耗尽内存。默认 2MiB。
+    max_request_body_bytes: int = 2 * 1024 * 1024
 
     # 服务状态采集(T1.12):SSH 轮询补齐间隔(秒);Agent 接入后由心跳取代(§6.1)
     status_collect_interval_sec: float = 30.0

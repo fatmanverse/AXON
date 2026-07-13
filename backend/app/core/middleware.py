@@ -63,14 +63,28 @@ def _client_key(request: Request) -> str:
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """全局限流:按客户端 IP 令牌桶,超限返回统一 envelope 的 429。"""
+    """全局限流:按客户端 IP 令牌桶,超限返回统一 envelope 的 429。
 
-    def __init__(self, app, limiter: RateLimiter, retry_after: int = 1) -> None:
+    exempt_prefixes 命中的路径跳过限流:webhook 走自身 HMAC 鉴权(§8.3),
+    机器对机器的正常突发上报不应被用户级 IP 限流误伤。
+    """
+
+    def __init__(
+        self,
+        app,
+        limiter: RateLimiter,
+        retry_after: int = 1,
+        exempt_prefixes: tuple[str, ...] = (),
+    ) -> None:
         super().__init__(app)
         self._limiter = limiter
         self._retry_after = retry_after
+        self._exempt_prefixes = tuple(exempt_prefixes)
 
     async def dispatch(self, request: Request, call_next) -> Response:
+        path = request.url.path
+        if any(path.startswith(prefix) for prefix in self._exempt_prefixes):
+            return await call_next(request)
         if not self._limiter.allow(_client_key(request)):
             log.warning("rate_limited", client=_client_key(request))
             response = JSONResponse(
@@ -79,4 +93,40 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             )
             response.headers["Retry-After"] = str(self._retry_after)
             return response
+        return await call_next(request)
+
+
+class BodySizeLimitMiddleware(BaseHTTPMiddleware):
+    """请求体大小限制(T0.12):超过上限返回 413,防超大请求体耗尽内存。
+
+    优先信任 Content-Length 头快速拒绝;缺失时(分块传输)读取 body 后按实际
+    字节数校验。校验通过则不改变下游读取 body 的能力(Starlette 缓存 body)。
+    """
+
+    def __init__(self, app, max_bytes: int) -> None:
+        super().__init__(app)
+        self._max_bytes = max_bytes
+
+    def _too_large(self) -> Response:
+        return JSONResponse(
+            status_code=413,
+            content=fail("request_too_large", "请求体超过大小上限"),
+        )
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        content_length = request.headers.get("Content-Length")
+        if content_length is not None:
+            try:
+                if int(content_length) > self._max_bytes:
+                    return self._too_large()
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content=fail("bad_content_length", "非法 Content-Length"),
+                )
+        else:
+            # 无 Content-Length(分块传输):读出 body 按实际字节校验。
+            body = await request.body()
+            if len(body) > self._max_bytes:
+                return self._too_large()
         return await call_next(request)

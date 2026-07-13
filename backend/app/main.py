@@ -3,6 +3,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.adapters.agent_gateway_registry import AgentGatewayRegistry
 from app.api import (
@@ -23,6 +24,7 @@ from app.core.db import Database
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import (
+    BodySizeLimitMiddleware,
     RateLimitMiddleware,
     RequestContextMiddleware,
     SecurityHeadersMiddleware,
@@ -106,19 +108,37 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
 
     # 中间件注册顺序:后加者在外层。期望执行顺序(外→内):
-    # SecurityHeaders(给一切响应含 429 盖章)→ RateLimit → RequestContext
+    # CORS → SecurityHeaders → RateLimit → BodySizeLimit → RequestContext
     app.add_middleware(RequestContextMiddleware)
+    # 请求体大小限制(T0.12):超过 max_request_body_bytes 的请求早拒 413,
+    # 防止超大 body 拖垮 worker。放内层(RequestContext 之外),在业务前拦。
+    app.add_middleware(
+        BodySizeLimitMiddleware,
+        max_bytes=settings.max_request_body_bytes,
+    )
     if settings.rate_limit_enabled:
         limiter = RateLimiter(
             capacity=settings.rate_limit_capacity,
             refill_per_sec=settings.rate_limit_refill_per_sec,
         )
+        # webhook 路由走自身 HMAC 鉴权(§8.3),按源节流,不应与用户请求同桶被误限,
+        # 故按前缀豁免全局限流(验收:webhook 不被误限流)。
         app.add_middleware(
             RateLimitMiddleware,
             limiter=limiter,
             retry_after=settings.rate_limit_retry_after,
+            exempt_prefixes=settings.rate_limit_exempt_prefixes,
         )
     app.add_middleware(SecurityHeadersMiddleware)
+    # CORS 白名单(T0.12):只放行 settings.cors_origins,置于最外层使预检与
+    # 实际响应都带 CORS 头。凭证放行按需(前端带 JWT 走 Authorization 头)。
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     register_exception_handlers(app)
     app.include_router(health.router)
     app.include_router(auth.router)
