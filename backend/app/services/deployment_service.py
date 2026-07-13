@@ -28,6 +28,7 @@ from app.models.task import TaskStatus
 from app.services.deployment_repository import DeploymentRepository
 from app.services.health_checker import HealthChecker
 from app.services.release_strategy import RolloutContext, execute_release_strategy
+from app.services.scan_result_repository import ScanResultRepository
 from app.services.service_repository import ServiceRepository
 from app.services.task_repository import TaskRepository
 
@@ -173,6 +174,14 @@ class DeploymentService:
             # 上一次成功部署,挂到 previous 支撑回滚链路
             previous = await DeploymentRepository(session).latest_successful(service_id, env=env)
             previous_id = previous.id if previous else None
+            # 全链路关联(§9/§14.9):带 git_sha 时回填本次扫描结果 id,使部署详情能
+            # 向前追溯到扫描结论。一个 sha 可能有多扫描器(各一条),取 scanner 序最靠前
+            # 的一条作代表焊点;无扫描结果则留空。
+            scan_result_id = None
+            if request.git_sha:
+                scans = await ScanResultRepository(session).list_for_git_sha(request.git_sha)
+                if scans:
+                    scan_result_id = scans[0].id
             adapter = self._adapter_provider(service)
             # 发布策略上下文在会话内解析(需读 runtime/runtime_ref,避免会话关闭后惰性访问);
             # 未注入 rollout_provider 时为 None,保持"仅触发 CI"的原行为。
@@ -193,6 +202,7 @@ class DeploymentService:
                 git_sha=request.git_sha,
                 operator=operator,
                 previous_deployment_id=previous_id,
+                scan_result_id=scan_result_id,
             )
             deployment_id = deployment.id
 

@@ -45,6 +45,7 @@ class DeploymentRepository:
         pipeline_url: str | None = None,
         operator: str | None = None,
         previous_deployment_id: str | None = None,
+        scan_result_id: str | None = None,
     ) -> Deployment:
         deployment = Deployment(
             service_id=service_id,
@@ -58,6 +59,7 @@ class DeploymentRepository:
             pipeline_url=pipeline_url,
             operator=operator,
             previous_deployment_id=previous_deployment_id,
+            scan_result_id=scan_result_id,
             status=DeploymentStatus.RUNNING,
             started_at=datetime.now(UTC),
         )
