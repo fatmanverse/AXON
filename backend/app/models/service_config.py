@@ -9,7 +9,7 @@ service 至多一条 is_current=True。敏感值存保险箱,配置里只存 ${s
 import uuid
 from enum import StrEnum
 
-from sqlalchemy import Boolean, Enum, Integer, String, Text
+from sqlalchemy import Boolean, Enum, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -49,3 +49,8 @@ class ServiceConfig(Base, TimestampMixin):
     comment: Mapped[str | None] = mapped_column(String(512), nullable=True)
     # 当前生效版本标记;同一 service 至多一条 True(仓储层切换时保证互斥)
     is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+
+    # version 在服务内唯一:同一 service 的 version 不可重复(仓储层自增保证连续)
+    __table_args__ = (
+        UniqueConstraint("service_id", "version", name="uq_service_configs_service_version"),
+    )
