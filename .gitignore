@@ -29,3 +29,9 @@ frontend/dist/
 /tmp/
 .tmp/
 *.db
+
+# 内部设计文档,不推远端(使用手册 docs/使用与部署.md 与 docs/brand/ 仍需跟踪)
+docs/前端设计规范.md
+docs/工程与测试约定.md
+docs/统一运维控制面-任务拆分.md
+docs/统一运维控制面-设计文档.md

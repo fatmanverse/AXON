@@ -1,6 +1,6 @@
 # 一脉 Axon 统一运维控制面
 
-企业级统一运维控制台。把 **提交 → 扫描 → 部署 → 监控 → 告警** 用 `service` / `git_sha` / `deployment_id` 三个关联键串成一条可回溯的交付链路,对标 JumpServer 的定位,但聚焦"交付态可追溯"而非单纯堡垒机。
+企业级统一运维控制台。把 **提交 → 扫描 → 部署 → 监控 → 告警** 用 `service` / `git_sha` / `deployment_id` 三个关联键串成一条可回溯的交付链路,聚焦"交付态可追溯"。
 
 一处触发部署,即可回答:这次上线部署的是哪个 commit、扫过什么漏洞、发布后 CPU 涨没涨、出问题能不能一键回滚。
 
@@ -177,7 +177,7 @@ sequenceDiagram
 │       └── stores/         # Zustand 状态
 ├── agent/                  # Go Agent 本体(独立交付物)
 ├── ops/                    # 监控栈配置(prometheus/alertmanager/grafana)
-├── docs/                   # 设计文档 / 任务拆分 / 使用与部署 / 工程约定
+├── docs/                   # 使用与部署指南
 ├── docker-compose.yml      # 本地全栈一键编排
 └── Makefile                # 常用命令封装(make help)
 ```
@@ -230,7 +230,7 @@ make backend-test     # cd backend && uv run pytest tests/ --cov=app
 make frontend-test    # cd frontend && npm run test
 ```
 
-后端严格 TDD,测试放独立 `tests/` 目录、与正式代码物理分离;前端每页过"反 AI 感清单"(见 [工程与测试约定](docs/工程与测试约定.md))。
+后端严格 TDD,测试放独立 `tests/` 目录、与正式代码物理分离;前端每页过"反 AI 感清单"。
 
 ---
 
@@ -255,6 +255,3 @@ make frontend-test    # cd frontend && npm run test
 ## 文档
 
 - [使用与部署指南](docs/使用与部署.md) — 本地起步、手动/Docker 打包部署、切库、运维流程速查、常见问题
-- [设计文档](docs/统一运维控制面-设计文档.md) — 完整架构与设计决策
-- [任务拆分](docs/统一运维控制面-任务拆分.md) — Epic 分期与任务清单
-- [前端设计规范](docs/前端设计规范.md) · [工程与测试约定](docs/工程与测试约定.md)

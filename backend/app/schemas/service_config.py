@@ -36,6 +36,10 @@ class ConfigVersionOut(BaseModel):
     created_by: str | None = None
     comment: str | None = None
     target_path: str | None = None
+    # 内容血缘(§14.5):content_hash 为内容 SHA-256(判等/跳过重复下发);
+    # diff_from 指向本版派生的上一生效版 id(首版为 None),供版本溯源。
+    content_hash: str = ""
+    diff_from: str | None = None
     is_current: bool
     created_at: datetime
 

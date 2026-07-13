@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import realtime
@@ -167,33 +168,90 @@ class DeploymentRepository:
         的旧事件(finished_at 早于已存记录)直接丢弃,不覆盖较新状态——避免重试导致
         running 晚于 success 到达时把状态改回去。webhook 上报的是已知结局,故 source
         标记为 pipeline-webhook,状态直接落传入值(不经 running 中转)。
+
+        并发安全(§8.3 ②):等价于 INSERT ... ON CONFLICT DO UPDATE,但用可移植的
+        savepoint(begin_nested)包裹 INSERT——撞唯一约束(两个首发上报并发到达)时
+        回退为 find+update,而非抛错。不写死方言特定的 ON CONFLICT 语法,守住"换库
+        零改代码"目标;savepoint 对 asyncpg 必需——否则 IntegrityError 会污染整个
+        事务(current transaction is aborted),后续写全失败。
         """
+        # 快路径:已存在则直接更新(重复上报是常态,免去无谓的 INSERT 尝试)。
         existing = await self.find_by_idempotency(
             pipeline_id=pipeline_id, service_id=service_id, env=env
         )
-        if existing is None:
-            deployment = Deployment(
-                service_id=service_id,
-                env=env,
-                pipeline_id=pipeline_id,
-                source=DeploymentSource.PIPELINE_WEBHOOK,
+        if existing is not None:
+            return await self._apply_webhook_update(
+                existing,
                 status=status,
                 git_sha=git_sha,
                 version=version,
                 artifact=artifact,
                 pipeline_url=pipeline_url,
                 operator=operator,
-                started_at=datetime.now(UTC),
                 finished_at=finished_at,
             )
-            self._session.add(deployment)
-            await self._session.flush()
-            realtime.enqueue_deployment(deployment)
-            return deployment
 
-        # 乱序保护:后到事件的 finished_at 早于已记录的,判为过期,整条丢弃。
-        # 比较前统一到 aware(sqlite 取回的 datetime 丢 tzinfo,naive 视为 UTC),
-        # 避免 naive/aware 混比抛 TypeError(生产 PostgreSQL 存 aware,测试走 sqlite)。
+        # 首发上报:在 savepoint 内尝试 INSERT。并发下只有一个成功,另一个撞唯一约束
+        # 回退到 update——达成 ON CONFLICT DO UPDATE 的同等收敛语义,且不产生重复行。
+        deployment = Deployment(
+            service_id=service_id,
+            env=env,
+            pipeline_id=pipeline_id,
+            source=DeploymentSource.PIPELINE_WEBHOOK,
+            status=status,
+            git_sha=git_sha,
+            version=version,
+            artifact=artifact,
+            pipeline_url=pipeline_url,
+            operator=operator,
+            started_at=datetime.now(UTC),
+            finished_at=finished_at,
+        )
+        try:
+            async with self._session.begin_nested():
+                self._session.add(deployment)
+                await self._session.flush()
+        except IntegrityError:
+            # 竞态:另一并发上报已插入同幂等键。savepoint 已回滚,主事务仍可用。
+            # 重新查出对方插入的记录并按本次上报更新之。
+            existing = await self.find_by_idempotency(
+                pipeline_id=pipeline_id, service_id=service_id, env=env
+            )
+            if existing is None:
+                # 唯一约束冲突却查不到记录:约束非幂等键所致,属真错误,不吞。
+                raise
+            return await self._apply_webhook_update(
+                existing,
+                status=status,
+                git_sha=git_sha,
+                version=version,
+                artifact=artifact,
+                pipeline_url=pipeline_url,
+                operator=operator,
+                finished_at=finished_at,
+            )
+
+        realtime.enqueue_deployment(deployment)
+        return deployment
+
+    async def _apply_webhook_update(
+        self,
+        existing: Deployment,
+        *,
+        status: DeploymentStatus,
+        git_sha: str | None,
+        version: str | None,
+        artifact: str | None,
+        pipeline_url: str | None,
+        operator: str | None,
+        finished_at: datetime | None,
+    ) -> Deployment:
+        """把一次 webhook 上报应用到已存在记录上(带乱序保护 + 非空才更新)。
+
+        乱序保护:后到事件的 finished_at 早于已记录的,判为过期,整条丢弃。比较前
+        统一到 aware(sqlite 取回的 datetime 丢 tzinfo,naive 视为 UTC),避免 naive/
+        aware 混比抛 TypeError(生产 PostgreSQL 存 aware,测试走 sqlite)。
+        """
         if (
             finished_at is not None
             and existing.finished_at is not None
