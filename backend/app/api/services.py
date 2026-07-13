@@ -331,6 +331,21 @@ async def delete_service(
     agent_registry=Depends(get_agent_registry),
     user: User = Depends(get_current_user),
 ) -> dict:
+    # 生产审批流(§10.2/§13):prod 删除是高危操作,开关开启时先落 pending 审批,
+    # 批准后才由 approvals API 执行(经 LifecycleService)。鉴权在 _accept_action 内。
+    service = await ServiceRepository(session).get_service(service_id)
+    _require_service_permission(user, service, TaskType.DELETE)
+    approval_id = await _maybe_create_prod_approval(
+        service=service,
+        action=ApprovalAction.DELETE,
+        payload={},
+        request=request,
+        session=session,
+        user=user,
+    )
+    if approval_id is not None:
+        return ok({"approval_id": approval_id, "status": "pending", "pending_approval": True})
+
     return await _handle(
         service_id,
         TaskType.DELETE,
@@ -344,6 +359,43 @@ async def delete_service(
         agent_registry,
         user,
     )
+
+
+async def _maybe_create_prod_approval(
+    *,
+    service: Service,
+    action: ApprovalAction,
+    payload: dict,
+    request: Request,
+    session: AsyncSession,
+    user: User,
+) -> str | None:
+    """prod 高危操作(deploy/delete/rollback)在开关开启时落 pending 审批(§10.2/§13)。
+
+    返回 approval_id 表示已进审批(调用方据此返回 pending 响应,不执行);返回 None
+    表示无需审批(dev/staging 或未开开关),调用方按原路径直接执行。审批发起入审计。
+    """
+    settings = request.app.state.settings
+    if service.env != ServiceEnvironment.PROD or not settings.require_prod_approval:
+        return None
+    approval = await ApprovalRepository(session).create(
+        service_id=service.id,
+        env=service.env.value,
+        action=action,
+        payload=payload,
+        requested_by=user.username,
+    )
+    await AuditService(session).record(
+        actor=user.username,
+        action=f"service.{action.value}.request_approval",
+        target=f"service:{service.id}",
+        env=service.env.value,
+        result=AuditResult.SUCCESS,
+        after={"approval_id": approval.id, "action": action.value},
+        ip=request.client.host if request.client else None,
+        ua=request.headers.get("user-agent"),
+    )
+    return approval.id
 
 
 async def _start_deploy(
@@ -386,6 +438,7 @@ async def _start_deploy(
         adapter_provider=provider,
         health_checker=health_checker,
         rollout_provider=rollout_provider,
+        auto_rollback_on_health_fail=request.app.state.settings.auto_rollback_on_health_fail,
     )
     background.add_task(
         deployer.run_deploy,
@@ -434,32 +487,20 @@ async def deploy_service(
 
     # 生产审批流(§10.2/§13):prod 高危操作在开关开启时不直接执行,先落 pending
     # 审批,返回审批 id;具 approval 权限者批准后才建 task 执行(见 approvals API)。
-    settings = request.app.state.settings
-    if service.env == ServiceEnvironment.PROD and settings.require_prod_approval:
-        approval = await ApprovalRepository(session).create(
-            service_id=service_id,
-            env=service.env.value,
-            action=ApprovalAction.DEPLOY,
-            payload={
-                "version": body.version,
-                "strategy": body.strategy.value,
-                "git_sha": body.git_sha,
-            },
-            requested_by=user.username,
-        )
-        await AuditService(session).record(
-            actor=user.username,
-            action="service.deploy.request_approval",
-            target=f"service:{service_id}",
-            env=service.env.value,
-            result=AuditResult.SUCCESS,
-            after={"approval_id": approval.id, "version": body.version},
-            ip=request.client.host if request.client else None,
-            ua=request.headers.get("user-agent"),
-        )
-        return ok(
-            {"approval_id": approval.id, "status": approval.status.value, "pending_approval": True}
-        )
+    approval_id = await _maybe_create_prod_approval(
+        service=service,
+        action=ApprovalAction.DEPLOY,
+        payload={
+            "version": body.version,
+            "strategy": body.strategy.value,
+            "git_sha": body.git_sha,
+        },
+        request=request,
+        session=session,
+        user=user,
+    )
+    if approval_id is not None:
+        return ok({"approval_id": approval_id, "status": "pending", "pending_approval": True})
 
     task_id = await _start_deploy(
         service=service,
@@ -488,11 +529,26 @@ async def rollback_service(
     health_checker=Depends(get_health_checker),
     user: User = Depends(get_current_user),
 ) -> dict:
-    """一键回滚(§11.1):重部署上一版制品。与 deploy 同权限点,异步落 ROLLBACK task。"""
+    """一键回滚(§11.1):重部署上一版制品。与 deploy 同权限点,异步落 ROLLBACK task。
+
+    prod 高危操作在审批开关开启时不直接执行,先落 pending 审批(§10.2/§13),批准后
+    才由 approvals API 执行。
+    """
     service = await ServiceRepository(session).get_service(service_id)
     _require_service_permission(user, service, TaskType.DEPLOY)
     if provider is None:
         raise AppError("pipeline_not_configured", "未配置 CI 适配器,无法触发回滚", status_code=503)
+
+    approval_id = await _maybe_create_prod_approval(
+        service=service,
+        action=ApprovalAction.ROLLBACK,
+        payload={},
+        request=request,
+        session=session,
+        user=user,
+    )
+    if approval_id is not None:
+        return ok({"approval_id": approval_id, "status": "pending", "pending_approval": True})
 
     task = await TaskRepository(session).create(
         type=TaskType.ROLLBACK,

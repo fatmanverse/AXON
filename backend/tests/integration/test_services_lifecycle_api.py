@@ -64,6 +64,10 @@ async def app_client(monkeypatch):
         secret_backend="local",
         secret_master_key="",
         rate_limit_enabled=False,
+        # 本文件验证生命周期动作的鉴权与多态路由(直接执行路径),非审批流;
+        # 关掉 prod 审批开关,使 prod delete 直接执行返回 task_id(审批流由
+        # test_approval_flow_api 专门覆盖)。
+        require_prod_approval=False,
     )
     app: FastAPI = create_app(settings)
     monkeypatch.setattr(ssh_executor, "_default_connector", lambda **_: _FakeConnection(ok=True))
@@ -106,16 +110,12 @@ async def _seed_service(app, *, env=ServiceEnvironment.PROD, runtime=Runtime.SYS
                 runtime_ref={"unit_name": "billing.service"},
             )
         )
-        await svc_repo.create_placement(
-            PlacementCreate(service_id=service.id, server_id=server.id)
-        )
+        await svc_repo.create_placement(PlacementCreate(service_id=service.id, server_id=server.id))
         return service.id
 
 
 async def _token(client, username, password):
-    resp = await client.post(
-        "/api/auth/login", json={"username": username, "password": password}
-    )
+    resp = await client.post("/api/auth/login", json={"username": username, "password": password})
     return resp.json()["data"]["access_token"]
 
 
@@ -187,9 +187,7 @@ async def test_lifecycle_requires_auth(app_client):
 async def test_unknown_service_returns_404(app_client):
     client, _, _ = app_client
     token = await _token(client, "admin", "admin-pw")
-    resp = await client.post(
-        "/api/services/" + "0" * 32 + "/restart", headers=_auth(token)
-    )
+    resp = await client.post("/api/services/" + "0" * 32 + "/restart", headers=_auth(token))
     assert resp.status_code == 404
 
 

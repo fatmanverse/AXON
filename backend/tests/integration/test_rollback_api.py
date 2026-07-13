@@ -41,6 +41,8 @@ async def app_client():
         secret_backend="local",
         secret_master_key="",
         rate_limit_enabled=False,
+        # 本用例验证直接回滚路径(非审批);prod 审批门控由 test_approval_flow_api 覆盖。
+        require_prod_approval=False,
     )
     app: FastAPI = create_app(settings)
 
@@ -87,9 +89,7 @@ async def _seed_success(app, service_id, *, version, artifact) -> None:
 
 
 async def _token(client, username, password):
-    resp = await client.post(
-        "/api/auth/login", json={"username": username, "password": password}
-    )
+    resp = await client.post("/api/auth/login", json={"username": username, "password": password})
     return resp.json()["data"]["access_token"]
 
 
@@ -103,9 +103,7 @@ async def test_rollback_returns_task_and_succeeds(app_client):
     await _seed_success(app, service_id, version="v1", artifact="registry/app:v1")
     token = await _token(client, "operator", "op-pw")
 
-    resp = await client.post(
-        f"/api/services/{service_id}/rollback", headers=_auth(token)
-    )
+    resp = await client.post(f"/api/services/{service_id}/rollback", headers=_auth(token))
     assert resp.status_code == 202
     task_id = resp.json()["data"]["task_id"]
 
@@ -119,9 +117,7 @@ async def test_rollback_forbidden_for_developer_on_prod(app_client):
     await _seed_success(app, service_id, version="v1", artifact="a1")
     token = await _token(client, "dev", "dev-pw")
 
-    resp = await client.post(
-        f"/api/services/{service_id}/rollback", headers=_auth(token)
-    )
+    resp = await client.post(f"/api/services/{service_id}/rollback", headers=_auth(token))
     assert resp.status_code == 403
 
 
@@ -135,7 +131,5 @@ async def test_rollback_requires_auth(app_client):
 async def test_rollback_unknown_service_404(app_client):
     client, _, _ = app_client
     token = await _token(client, "operator", "op-pw")
-    resp = await client.post(
-        "/api/services/" + "0" * 32 + "/rollback", headers=_auth(token)
-    )
+    resp = await client.post("/api/services/" + "0" * 32 + "/rollback", headers=_auth(token))
     assert resp.status_code == 404

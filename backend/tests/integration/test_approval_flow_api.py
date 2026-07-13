@@ -66,9 +66,7 @@ async def app_client(tmp_path):
 
 
 async def _token(client, username, password):
-    resp = await client.post(
-        "/api/auth/login", json={"username": username, "password": password}
-    )
+    resp = await client.post("/api/auth/login", json={"username": username, "password": password})
     return resp.json()["data"]["access_token"]
 
 
@@ -142,9 +140,7 @@ async def test_approve_creates_task(app_client):
 
     # 审批人须独立于发起人(§13):由第二个 operator 批准
     boss_token = await _token(client, "boss", "boss-pw")
-    approve = await client.post(
-        f"/api/approvals/{approval_id}/approve", headers=_auth(boss_token)
-    )
+    approve = await client.post(f"/api/approvals/{approval_id}/approve", headers=_auth(boss_token))
     assert approve.status_code == 202
     data = approve.json()["data"]
     assert data["status"] == "approved"
@@ -186,9 +182,7 @@ async def test_developer_cannot_approve(app_client):
     approval_id = deploy.json()["data"]["approval_id"]
 
     dev_token = await _token(client, "dev", "dev-pw")
-    resp = await client.post(
-        f"/api/approvals/{approval_id}/approve", headers=_auth(dev_token)
-    )
+    resp = await client.post(f"/api/approvals/{approval_id}/approve", headers=_auth(dev_token))
     assert resp.status_code == 403
 
 
@@ -205,9 +199,7 @@ async def test_cannot_approve_twice(app_client):
     approval_id = deploy.json()["data"]["approval_id"]
     await client.post(f"/api/approvals/{approval_id}/approve", headers=_auth(boss))
 
-    resp = await client.post(
-        f"/api/approvals/{approval_id}/approve", headers=_auth(boss)
-    )
+    resp = await client.post(f"/api/approvals/{approval_id}/approve", headers=_auth(boss))
     assert resp.status_code == 409
 
 
@@ -223,7 +215,95 @@ async def test_cannot_approve_own_request(app_client):
     )
     approval_id = deploy.json()["data"]["approval_id"]
 
-    resp = await client.post(
-        f"/api/approvals/{approval_id}/approve", headers=_auth(token)
-    )
+    resp = await client.post(f"/api/approvals/{approval_id}/approve", headers=_auth(token))
     assert resp.status_code == 403
+
+
+async def _seed_success_deployment(app, service_id):
+    """给服务留一版成功部署,供 rollback 取制品。"""
+    from app.models.deployment import DeploymentSource, DeploymentStatus
+    from app.services.deployment_repository import DeploymentRepository
+
+    db = app.state.db
+    async with db.session() as session:
+        repo = DeploymentRepository(session)
+        dep = await repo.create(
+            service_id=service_id,
+            env="prod",
+            source=DeploymentSource.UI_TRIGGERED,
+            version="v1",
+            artifact="registry/app:v1",
+        )
+        await repo.mark_status(dep.id, DeploymentStatus.SUCCESS)
+
+
+async def test_prod_rollback_creates_pending_approval(app_client):
+    """prod rollback 在审批开关开启时不直接执行,落 pending 审批(HIGH-2)。"""
+    client, _, app = app_client
+    op = await _token(client, "operator", "op-pw")
+    service_id = await _create_service(client, op, "billing", "prod")
+    await _seed_success_deployment(app, service_id)
+
+    resp = await client.post(f"/api/services/{service_id}/rollback", headers=_auth(op))
+    assert resp.status_code == 202
+    body = resp.json()["data"]
+    assert body["pending_approval"] is True
+    assert body["approval_id"]
+    # 未直接建 rollback task(返回的是审批而非 task_id)
+    assert "task_id" not in body
+
+
+async def test_prod_delete_creates_pending_approval(app_client):
+    """prod delete 在审批开关开启时不直接执行,落 pending 审批(HIGH-2)。"""
+    client, _, app = app_client
+    op = await _token(client, "operator", "op-pw")
+    service_id = await _create_service(client, op, "gateway", "prod")
+
+    resp = await client.delete(f"/api/services/{service_id}", headers=_auth(op))
+    assert resp.status_code == 202
+    body = resp.json()["data"]
+    assert body["pending_approval"] is True
+    assert body["approval_id"]
+
+
+async def test_approve_rollback_dispatches_execution(app_client):
+    """批准 rollback 审批后,经 DeploymentService 执行回滚并落 task(HIGH-2)。"""
+    client, _, app = app_client
+    op = await _token(client, "operator", "op-pw")
+    boss = await _token(client, "boss", "boss-pw")
+    service_id = await _create_service(client, op, "billing", "prod")
+    await _seed_success_deployment(app, service_id)
+
+    pending = await client.post(f"/api/services/{service_id}/rollback", headers=_auth(op))
+    approval_id = pending.json()["data"]["approval_id"]
+
+    # 由另一审批人批准(自审批防护)
+    approved = await client.post(f"/api/approvals/{approval_id}/approve", headers=_auth(boss))
+    assert approved.status_code == 202
+    task_id = approved.json()["data"]["task_id"]
+    assert task_id
+    # 回滚 task 跑到成功(fake CI 立即成功)
+    got = await client.get(f"/api/tasks/{task_id}", headers=_auth(op))
+    assert got.json()["data"]["status"] == "success"
+
+
+async def test_approve_delete_dispatches_lifecycle(app_client):
+    """批准 delete 审批后,经 LifecycleService 执行删除并落 task(HIGH-2)。
+
+    删除动作在无真实 SSH/agent 连接时会落 failed(agent 占位/无 executor),
+    但关键是走了执行路径并建出 delete task,而非被 501 拒绝。"""
+    client, _, app = app_client
+    op = await _token(client, "operator", "op-pw")
+    boss = await _token(client, "boss", "boss-pw")
+    service_id = await _create_service(client, op, "gateway", "prod")
+
+    pending = await client.delete(f"/api/services/{service_id}", headers=_auth(op))
+    approval_id = pending.json()["data"]["approval_id"]
+
+    approved = await client.post(f"/api/approvals/{approval_id}/approve", headers=_auth(boss))
+    assert approved.status_code == 202
+    task_id = approved.json()["data"]["task_id"]
+    assert task_id
+    # 建出的是 delete task(执行路径已接通,不再 501)
+    got = await client.get(f"/api/tasks/{task_id}", headers=_auth(op))
+    assert got.json()["data"]["type"] == "delete"

@@ -95,6 +95,9 @@ class Settings(BaseSettings):
     deploy_block_on_critical: bool = True
     # 告警触发自动回滚(§11.2):默认关闭,改变生产状态须显式开启
     auto_rollback_on_alert: bool = False
+    # 发布后健康检查失败自动回滚(§11.1/§11.2):默认关闭。开启后部署健康检查未通过时,
+    # 除标记 FAILED 外再自动回滚到上一版成功制品(留 rolled_back 记录),而非只标失败。
+    auto_rollback_on_health_fail: bool = False
     # 生产审批流(§10.2/§13):开启时 prod 的 deploy/delete/rollback 先落 pending 审批,
     # 具 approve 权限者批准后才执行。默认开启——生产高危操作应有人工闸门。
     require_prod_approval: bool = True

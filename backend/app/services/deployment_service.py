@@ -62,6 +62,7 @@ class DeploymentService:
         adapter_provider: AdapterProvider,
         health_checker: HealthChecker | None = None,
         rollout_provider: RolloutProvider | None = None,
+        auto_rollback_on_health_fail: bool = False,
     ) -> None:
         self._db = db
         self._adapter_provider = adapter_provider
@@ -70,6 +71,9 @@ class DeploymentService:
         # (runtime, strategy) 执行滚动/重建等。默认 None——未注入时保持原行为
         # (仅触发 CI,由 CI 内部铺开),不破坏既有部署路径与测试。
         self._rollout_provider = rollout_provider
+        # 发布后健康检查失败自动回滚(§11.2):默认关闭。开启后健康检查未通过时,
+        # 除标 FAILED 外再自动重部署上一版成功制品(留 rolled_back 闭环)。
+        self._auto_rollback_on_health_fail = auto_rollback_on_health_fail
 
     async def run_deploy(
         self,
@@ -113,12 +117,43 @@ class DeploymentService:
                     deployment_id=deployment_id,
                     detail=result.detail,
                 )
+                # 健康检查失败自动回滚(§11.2):开关开启时重部署上一版成功制品。
+                # 回滚自身失败不覆盖健康检查的 FAILED 结论,仅记日志(部署已判失败,
+                # 回滚是补救;补救失败需人工介入,但原始失败结论保持不变)。
+                if self._auto_rollback_on_health_fail:
+                    await self._try_auto_rollback(service_id, operator, deployment_id)
                 return
 
         async with self._db.session() as session:
             await DeploymentRepository(session).mark_status(deployment_id, DeploymentStatus.SUCCESS)
             await TaskRepository(session).mark_result(
                 task_id, TaskStatus.SUCCESS, result={"version": request.version}
+            )
+
+    async def _try_auto_rollback(
+        self, service_id: str, operator: str, failed_deployment_id: str
+    ) -> None:
+        """健康检查失败后触发自动回滚(§11.2):重部署上一版已知good制品。
+
+        复用 _execute_rollback——它取 latest_successful(此刻已跳过刚落 FAILED 的本次
+        部署),故回滚目标就是上一版成功制品。全程不抛:自动回滚是补偿动作,失败只
+        记日志,不改写已落 FAILED 的原部署 task(避免掩盖"发布失败"这一事实)。
+        """
+        try:
+            version = await self._execute_rollback(service_id, operator)
+            log.warning(
+                "auto_rollback_after_unhealthy",
+                service_id=service_id,
+                failed_deployment_id=failed_deployment_id,
+                rolled_back_to=version,
+            )
+        except Exception as exc:  # noqa: BLE001 —— 自动回滚失败不得影响主流程
+            message = exc.message if isinstance(exc, AppError) else str(exc)
+            log.warning(
+                "auto_rollback_failed",
+                service_id=service_id,
+                failed_deployment_id=failed_deployment_id,
+                error=message,
             )
 
     async def _execute(
