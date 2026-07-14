@@ -1,19 +1,15 @@
-/**
- * 服务器纳管 API 服务(T1.16)。对齐后端 app/api/servers.py 契约:
- * - 列表 / 纳管(SSH 存私钥换 credential_id)/ 删除 / 连通性测试。
- * 私钥只在纳管请求里出现一次,响应绝不回传(§13),前端不缓存。
- */
-
 import { api } from "./client";
 
 export type AccessMode = "ssh" | "agent";
 export type AgentStatus = "online" | "offline" | "unknown";
+export type SshAuthType = "key" | "password";
 
 export interface Server {
   id: string;
   name: string;
   host: string;
   access_mode: AccessMode;
+  environment: string | null;
   ssh_credential_id: string | null;
   agent_id: string | null;
   agent_status: AgentStatus;
@@ -25,8 +21,11 @@ export interface RegisterSshServer {
   name: string;
   host: string;
   access_mode: "ssh";
+  environment: string;
+  auth_type: SshAuthType;
   username?: string;
-  ssh_private_key: string;
+  ssh_private_key?: string;
+  ssh_password?: string;
   ssh_port?: number;
   labels?: Record<string, unknown>;
 }
@@ -35,6 +34,7 @@ export interface RegisterAgentServer {
   name: string;
   host: string;
   access_mode: "agent";
+  environment: string;
   agent_id: string;
   labels?: Record<string, unknown>;
 }
@@ -43,6 +43,11 @@ export type RegisterServerRequest = RegisterSshServer | RegisterAgentServer;
 
 export interface ConnectivityResult {
   reachable: boolean;
+}
+
+export interface TaskAccepted {
+  task_id: string;
+  status: string;
 }
 
 export function listServers(): Promise<Server[]> {
@@ -59,4 +64,8 @@ export function deleteServer(serverId: string): Promise<{ deleted: boolean }> {
 
 export function testConnection(serverId: string): Promise<ConnectivityResult> {
   return api.post<ConnectivityResult>(`/api/servers/${serverId}/test-connection`);
+}
+
+export function installAgent(serverId: string): Promise<TaskAccepted> {
+  return api.post<TaskAccepted>(`/api/servers/${serverId}/install-agent`);
 }
