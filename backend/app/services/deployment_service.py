@@ -169,7 +169,7 @@ class DeploymentService:
         # 加载服务并取出编排所需字段(避免会话关闭后惰性访问)
         async with self._db.session() as session:
             service = await ServiceRepository(session).get_service(service_id)
-            env = service.env.value
+            env = service.env
             health_check = service.health_check
             # 上一次成功部署,挂到 previous 支撑回滚链路
             previous = await DeploymentRepository(session).latest_successful(service_id, env=env)

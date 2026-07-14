@@ -39,6 +39,9 @@ class SSHTarget:
     port: int
     username: str
     credential_id: str
+    # 认证方式:"key" 私钥(默认,保持既有行为)/ "password" 密码。二者都经
+    # credential_id 从保险箱取值——密码与私钥同属机密,绝不落业务表(§13)。
+    auth_type: str = "key"
     connect_timeout: float = 10.0
     # 建连重试(§5.1):瞬时网络抖动/对端未就绪时,按退避重试建连。
     # 仅重试「建立连接」阶段,不重试命令执行——命令可能已部分执行,盲目重跑不幂等。
@@ -67,16 +70,22 @@ class SSHExecutor(Executor):
         self._connector = connector or _default_connector
 
     def _connect(self) -> Any:
-        # 每次建连时从保险箱取私钥,不缓存明文
-        client_key = self._secrets.get(self._target.credential_id)
-        return self._connector(
-            host=self._target.host,
-            port=self._target.port,
-            username=self._target.username,
-            client_key=client_key,
-            connect_timeout=self._target.connect_timeout,
-            known_hosts=None,
-        )
+        # 每次建连时从保险箱取机密(私钥或密码),不缓存明文。
+        secret = self._secrets.get(self._target.credential_id)
+        kwargs: dict[str, Any] = {
+            "host": self._target.host,
+            "port": self._target.port,
+            "username": self._target.username,
+            "connect_timeout": self._target.connect_timeout,
+            "known_hosts": None,
+        }
+        # 按认证方式选参:password 走 asyncssh 的 password=,key 走 client_key=。
+        # 二选一——不同时传,避免 asyncssh 认证方式歧义。
+        if self._target.auth_type == "password":
+            kwargs["password"] = secret
+        else:
+            kwargs["client_key"] = secret
+        return self._connector(**kwargs)
 
     async def exec(self, command: str, *, timeout: float | None = None) -> CommandResult:
         effective_timeout = timeout if timeout is not None else DEFAULT_TIMEOUT

@@ -10,6 +10,7 @@ from app.models.audit import AuditLog
 from app.models.base import Base
 from app.models.config_delivery import ConfigDelivery
 from app.models.deployment import Deployment
+from app.models.environment import Environment
 from app.models.scan_result import ScanResult
 from app.models.server import Server
 from app.models.service import Service, ServicePlacement
@@ -34,4 +35,5 @@ __all__ = [
     "Deployment",
     "ConfigDelivery",
     "Approval",
+    "Environment",
 ]

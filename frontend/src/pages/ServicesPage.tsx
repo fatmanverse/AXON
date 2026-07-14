@@ -10,6 +10,7 @@
 import { useState } from "react";
 import {
   Button,
+  Descriptions,
   Drawer,
   Form,
   Input,
@@ -39,6 +40,7 @@ import {
   runLifecycle,
 } from "@/api/services";
 import { pollTaskUntilDone } from "@/api/taskPolling";
+import { TableToolbar, type ColumnToggle } from "@/components/TableToolbar";
 import { colors } from "@/theme";
 
 const ENV_TAG: Record<ServiceEnvironment, string> = {
@@ -77,6 +79,15 @@ const ACTION_LABEL: Record<LifecycleAction, string> = {
   delete: "删除",
 };
 
+// 可显隐的列(排除「名称」身份列与「操作」固定列)。
+const TOGGLEABLE_COLUMNS: ColumnToggle[] = [
+  { key: "env", label: "环境" },
+  { key: "runtime", label: "运行时" },
+  { key: "placement_count", label: "放置数" },
+  { key: "desired_version", label: "期望版本" },
+];
+const DEFAULT_VISIBLE = TOGGLEABLE_COLUMNS.map((c) => c.key);
+
 interface ServiceFormValues {
   name: string;
   env: ServiceEnvironment;
@@ -95,16 +106,68 @@ function toCreateRequest(values: ServiceFormValues): CreateServiceRequest {
   };
 }
 
+/** 服务详情抽屉:只读展示列表已有字段(环境/运行时/放置数/期望版本/运行时目标)。 */
+function ServiceDetailDrawer({
+  service,
+  onClose,
+}: {
+  service: Service | null;
+  onClose: () => void;
+}): React.ReactElement {
+  return (
+    <Drawer
+      title={service ? `服务详情 · ${service.name}` : "服务详情"}
+      width={480}
+      open={service != null}
+      onClose={onClose}
+      destroyOnClose
+    >
+      {service && (
+        <Descriptions column={1} size="small" bordered>
+          <Descriptions.Item label="服务名">{service.name}</Descriptions.Item>
+          <Descriptions.Item label="环境">
+            <Tag color={ENV_TAG[service.env]}>{service.env}</Tag>
+          </Descriptions.Item>
+          <Descriptions.Item label="运行时">
+            <Tag>{service.runtime}</Tag>
+          </Descriptions.Item>
+          <Descriptions.Item label="放置数">{service.placement_count}</Descriptions.Item>
+          <Descriptions.Item label="期望版本">
+            {service.desired_version ?? <span style={{ color: "#B0B3B5" }}>—</span>}
+          </Descriptions.Item>
+          <Descriptions.Item label="重启方式">{service.reload_mode}</Descriptions.Item>
+          <Descriptions.Item label="运行时目标">
+            <pre
+              style={{
+                margin: 0,
+                fontSize: 12,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-all",
+                color: colors.textBody,
+              }}
+            >
+              {JSON.stringify(service.runtime_ref, null, 2)}
+            </pre>
+          </Descriptions.Item>
+        </Descriptions>
+      )}
+    </Drawer>
+  );
+}
+
 export function ServicesPage(): React.ReactElement {
   const queryClient = useQueryClient();
   const [envFilter, setEnvFilter] = useState<ServiceEnvironment | undefined>();
   const [runtimeFilter, setRuntimeFilter] = useState<Runtime | undefined>();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE);
+  const [detailService, setDetailService] = useState<Service | null>(null);
   const [form] = Form.useForm<ServiceFormValues>();
 
   const filters: ListServicesParams = { env: envFilter, runtime: runtimeFilter };
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ["services", envFilter, runtimeFilter],
     queryFn: () => listServices(filters),
   });
@@ -156,7 +219,11 @@ export function ServicesPage(): React.ReactElement {
       title: "名称",
       dataIndex: "name",
       key: "name",
-      render: (name: string) => <span style={{ color: colors.textTitle }}>{name}</span>,
+      render: (name: string, row) => (
+        <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setDetailService(row)}>
+          {name}
+        </Button>
+      ),
     },
     {
       title: "环境",
@@ -235,6 +302,18 @@ export function ServicesPage(): React.ReactElement {
     },
   ];
 
+  // 「名称」「操作」为固定列,其余按可见集合裁剪;搜索按服务名前端即时过滤。
+  const visibleTableColumns = columns.filter(
+    (col) =>
+      col.key === "name" ||
+      col.key === "actions" ||
+      visibleColumns.includes(col.key as string),
+  );
+  const keyword = search.trim().toLowerCase();
+  const filteredData = (data ?? []).filter(
+    (s) => !keyword || s.name.toLowerCase().includes(keyword),
+  );
+
   if (error) {
     return (
       <Result
@@ -246,41 +325,46 @@ export function ServicesPage(): React.ReactElement {
 
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 12,
+      <TableToolbar
+        title="服务"
+        filters={
+          <>
+            <Select<ServiceEnvironment>
+              size="small"
+              allowClear
+              placeholder="全部环境"
+              value={envFilter}
+              onChange={setEnvFilter}
+              options={ENV_OPTIONS}
+              style={{ width: 120 }}
+            />
+            <Select<Runtime>
+              size="small"
+              allowClear
+              placeholder="全部运行时"
+              value={runtimeFilter}
+              onChange={setRuntimeFilter}
+              options={RUNTIME_OPTIONS}
+              style={{ width: 130 }}
+            />
+          </>
+        }
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="搜索服务名"
+        onRefresh={() => void refetch()}
+        refreshing={isFetching}
+        columnSettings={{
+          options: TOGGLEABLE_COLUMNS,
+          value: visibleColumns,
+          onChange: setVisibleColumns,
         }}
-      >
-        <Space size="middle">
-          <span style={{ fontSize: 14, fontWeight: 600, color: colors.textTitle }}>
-            服务
-          </span>
-          <Select<ServiceEnvironment>
-            size="small"
-            allowClear
-            placeholder="全部环境"
-            value={envFilter}
-            onChange={setEnvFilter}
-            options={ENV_OPTIONS}
-            style={{ width: 120 }}
-          />
-          <Select<Runtime>
-            size="small"
-            allowClear
-            placeholder="全部运行时"
-            value={runtimeFilter}
-            onChange={setRuntimeFilter}
-            options={RUNTIME_OPTIONS}
-            style={{ width: 130 }}
-          />
-        </Space>
-        <Button type="primary" onClick={() => setDrawerOpen(true)}>
-          新建服务
-        </Button>
-      </div>
+        actions={
+          <Button type="primary" size="small" onClick={() => setDrawerOpen(true)}>
+            新建服务
+          </Button>
+        }
+      />
 
       {isLoading ? (
         <Skeleton active paragraph={{ rows: 5 }} />
@@ -288,9 +372,9 @@ export function ServicesPage(): React.ReactElement {
         <Table<Service>
           rowKey="id"
           size="small"
-          columns={columns}
-          dataSource={data ?? []}
-          pagination={false}
+          columns={visibleTableColumns}
+          dataSource={filteredData}
+          pagination={{ pageSize: 15, hideOnSinglePage: true, showSizeChanger: false }}
           locale={{ emptyText: "暂无服务,点击右上角新建" }}
           bordered
         />
@@ -354,6 +438,11 @@ export function ServicesPage(): React.ReactElement {
           </Form.Item>
         </Form>
       </Drawer>
+
+      <ServiceDetailDrawer
+        service={detailService}
+        onClose={() => setDetailService(null)}
+      />
     </div>
   );
 }

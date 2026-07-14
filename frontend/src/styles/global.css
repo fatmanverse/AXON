@@ -25,3 +25,12 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+/*
+ * JumpServer/INSPINIA 招牌选中态:深色侧栏当前菜单项左侧 3px 经典绿高亮条。
+ * AntD 深色 Menu 无对应 token,用 inset box-shadow 画左条——不占布局、不引起
+ * 位移,展开与折叠(图标条)两种形态都生效。仅作用于叶子菜单项,不动分组标题。
+ */
+.ant-menu-dark .ant-menu-item-selected {
+  box-shadow: inset 3px 0 0 0 #1ab394;
+}

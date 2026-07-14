@@ -26,6 +26,10 @@ class ServerRepository:
             raise AppError("server_not_found", "服务器不存在", status_code=404)
         return server
 
+    async def find(self, server_id: str) -> Server | None:
+        """按 id 查找,不存在返回 None(供后台任务健壮处理,不抛异常)。"""
+        return await self._session.get(Server, server_id)
+
     async def list(self) -> Sequence[Server]:
         result = await self._session.execute(select(Server).order_by(Server.name))
         return result.scalars().all()

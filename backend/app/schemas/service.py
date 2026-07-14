@@ -6,12 +6,14 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.models.deployment import DeploymentStrategy
-from app.models.service import ObservedStatus, ReloadMode, Runtime, ServiceEnvironment
+from app.models.service import ObservedStatus, ReloadMode, Runtime
 
 
 class ServiceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
-    env: ServiceEnvironment
+    # env 为环境 name 字符串(引用 environments 表);由 API 层软校验该环境存在。
+    # 不再受 dev/staging/prod 枚举约束,可为任意已创建的自定义环境名。
+    env: str = Field(min_length=1, max_length=64)
     runtime: Runtime
     runtime_ref: dict[str, Any] = Field(min_length=1)
     desired_version: str | None = Field(default=None, max_length=128)
@@ -32,7 +34,7 @@ class ServiceOut(BaseModel):
 
     id: str
     name: str
-    env: ServiceEnvironment
+    env: str
     runtime: Runtime
     runtime_ref: dict[str, Any]
     desired_version: str | None = None

@@ -131,6 +131,25 @@ async def test_bootstrap_install_failure_does_not_register(db, secrets, tmp_path
     assert not sd_file.exists() or _read(sd_file) == []
 
 
+async def test_bootstrap_missing_server_returns_without_raising(db, secrets, tmp_path):
+    # 后台任务健壮性契约:服务器查不到(已删除 / 事务尚未对本会话可见)时,
+    # 记录后返回 skipped,绝不抛异常——否则异常穿回 ASGI 栈触发
+    # "response already started",并回滚纳管事务导致服务器不可见。
+    sd_file = tmp_path / "nodes.json"
+    service = MonitoringBootstrapService(
+        db,
+        secrets,
+        registry=PrometheusTargetRegistry(sd_file),
+        connector=lambda **_: _FakeConnection(ok=True),
+    )
+
+    result = await service.bootstrap_server("nonexistent-server-id")
+
+    assert result.skipped is True
+    assert result.installed is False
+    assert not sd_file.exists() or _read(sd_file) == []
+
+
 async def test_bootstrap_agent_server_is_skipped(db, tmp_path):
     server_id = await _seed_agent_server(db)
     sd_file = tmp_path / "nodes.json"

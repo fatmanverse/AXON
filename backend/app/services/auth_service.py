@@ -20,6 +20,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
         "config:*:*",
         "deployment:*:*",
         "approval:*:*",
+        "environment:*:*",
     ],
     "developer": [
         "service:dev:*",
@@ -30,12 +31,14 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
         "config:staging:*",
         "deployment:dev:*",
         "deployment:staging:*",
+        "environment:*:read",
     ],
     "viewer": [
         "service:*:read",
         "server:*:read",
         "config:*:read",
         "deployment:*:read",
+        "environment:*:read",
     ],
 }
 

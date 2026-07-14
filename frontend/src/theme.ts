@@ -11,6 +11,7 @@ export const colors = {
   sidebarBg: "#2F4050",
   sidebarText: "#A7B1C2",
   sidebarActiveBg: "#293846",
+  sidebarGroupTitle: "#68757C",
   headerBorder: "#E7EAEC",
   contentBg: "#F3F3F4",
   cardBg: "#FFFFFF",
@@ -23,8 +24,11 @@ export const colors = {
   info: "#1C84C6",
 } as const;
 
+// 对齐 JumpServer 的无衬线字体栈:Helvetica Neue / Roboto 优先,中文回退到
+// PingFang / 微软雅黑,末位 Arial 兜底。
 const fontStack =
-  '-apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif';
+  '"Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", ' +
+  '"Microsoft YaHei", "微软雅黑", Roboto, -apple-system, BlinkMacSystemFont, sans-serif';
 
 export const antdTheme: ThemeConfig = {
   token: {
@@ -57,7 +61,12 @@ export const antdTheme: ThemeConfig = {
       darkItemColor: colors.sidebarText,
       darkItemSelectedBg: colors.sidebarActiveBg,
       darkItemSelectedColor: "#FFFFFF",
+      darkItemHoverBg: colors.sidebarActiveBg,
+      darkItemHoverColor: "#FFFFFF",
+      darkGroupTitleColor: colors.sidebarGroupTitle,
       itemHeight: 40,
+      itemMarginInline: 0,
+      itemBorderRadius: 0,
       iconSize: 14,
     },
     Card: {

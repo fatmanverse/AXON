@@ -20,6 +20,14 @@ def _uuid() -> str:
 
 
 class ServiceEnvironment(StrEnum):
+    """历史内置环境名的便捷常量(dev/staging/prod)。
+
+    环境已改为用户自建(见 app/models/environment.py 的 Environment 表),services.env
+    是纯字符串,可为任意已创建的环境名——不再受此枚举约束。本枚举仅作 seed / 测试 /
+    调用方书写常用环境名的便捷常量保留(StrEnum 成员即字符串,传给 str 字段兼容)。
+    是否走审批由 Environment.requires_approval 决定,不再由环境名硬编码判定。
+    """
+
     DEV = "dev"
     STAGING = "staging"
     PROD = "prod"
@@ -51,11 +59,10 @@ class Service(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
-    env: Mapped[ServiceEnvironment] = mapped_column(
-        Enum(ServiceEnvironment, name="service_environment", values_callable=_enum_values),
-        nullable=False,
-        index=True,
-    )
+    # env 存环境 name 字符串(不再是 Enum):环境由用户自建(Environment 表),可为任意
+    # 已创建的环境名。保持既有字符串语义贯穿 deployments/configs/审计/权限,环境是否存在
+    # 由纳管/建服务时软校验,是否走审批由 Environment.requires_approval 决定。
+    env: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     runtime: Mapped[Runtime] = mapped_column(
         Enum(Runtime, name="service_runtime", values_callable=_enum_values),
         nullable=False,

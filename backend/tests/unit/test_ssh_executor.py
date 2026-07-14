@@ -264,3 +264,48 @@ async def test_nonzero_exit_not_retried():
 
     assert result.succeeded is False
     assert connector.enter_calls == 1
+
+
+# ── SSH 密码认证(需求3):auth_type 区分 key/password,机密都从保险箱取 ──
+
+
+async def test_password_auth_passes_password_not_client_key():
+    """auth_type=password 时,连接参数带 password(取自保险箱)而非 client_key。"""
+    store = LocalSecretStore(master_key=generate_master_key())
+    cred_id = store.put("ssh-pw", "s3cr3t-pw")
+    captured: dict[str, object] = {}
+
+    def connector(**kwargs):
+        captured.update(kwargs)
+        return FakeConnection()
+
+    target = SSHTarget(
+        host="10.0.0.6",
+        port=22,
+        username="ops",
+        credential_id=cred_id,
+        auth_type="password",
+    )
+    executor = SSHExecutor(target, store, connector=connector)
+    await executor.exec("whoami")
+
+    # 密码来自保险箱;绝不传 client_key(否则 asyncssh 会尝试私钥认证)
+    assert captured["password"] == "s3cr3t-pw"
+    assert "client_key" not in captured
+    assert captured["username"] == "ops"
+
+
+async def test_key_auth_is_default_and_passes_client_key():
+    """不指定 auth_type 时默认私钥认证:连接参数带 client_key 而非 password(行为不变)。"""
+    store, cred_id = _store_with_key()
+    captured: dict[str, object] = {}
+
+    def connector(**kwargs):
+        captured.update(kwargs)
+        return FakeConnection()
+
+    executor = SSHExecutor(_target(cred_id), store, connector=connector)
+    await executor.exec("whoami")
+
+    assert "BEGIN PRIVATE KEY" in captured["client_key"]
+    assert "password" not in captured

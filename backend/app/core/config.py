@@ -133,6 +133,19 @@ class Settings(BaseSettings):
     # 心跳超时窗(秒):超过未收到心跳判 agent 离线,触发 §5.4 离线分档与 fencing。
     agent_heartbeat_timeout_sec: float = 30.0
 
+    # 离线分发(需求4):目标机经 SSH 装 node_exporter / axon-agent 时,从控制面下载
+    # 端点拉二进制而非公网 github——很多生产内网机器不通外网。dist_dir 是控制面本地
+    # 预置二进制的目录;control_plane_base_url 是目标机回连控制面的地址(装机脚本内
+    # curl 该地址 + /api/dist/<file>)。留空 base_url 时装机端点仍可用,但安装脚本
+    # 需调用方显式传 download_url。
+    dist_dir: str = "/var/lib/axon/dist"
+    control_plane_base_url: str = ""
+    # axon-agent 版本与落地位置(经 SSH 下发,需求4)。二进制名约定
+    # axon-agent-{version}-linux-amd64,预置在 dist_dir 下。
+    agent_version: str = "0.1.0"
+    agent_install_dir: str = "/usr/local/bin"
+    agent_service_name: str = "axon-agent"
+
     @property
     def broker_url(self) -> str:
         return self.celery_broker_url or self.redis_url

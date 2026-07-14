@@ -18,8 +18,10 @@ from app.core.db import Database
 from app.main import create_app
 from app.models.audit import AuditResult
 from app.models.base import Base
+from app.schemas.environment import EnvironmentCreate
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
+from app.services.environment_repository import EnvironmentRepository
 
 _FAKE_KEY = "-----BEGIN PRIVATE KEY-----\nfake-ops-key\n-----END PRIVATE KEY-----"
 
@@ -74,6 +76,11 @@ async def app_client(monkeypatch, tmp_path):
                 svc = AuthService(session, settings)
                 await svc.create_user("admin", "admin-pw", roles=["admin"])
                 await svc.create_user("dev", "dev-pw", roles=["developer"])
+                # 预置环境:纳管必选归属环境(需求2),既有用例统一挂到 prod
+                env_repo = EnvironmentRepository(session)
+                await env_repo.create(
+                    EnvironmentCreate(name="prod", display_name="生产", requires_approval=True)
+                )
             yield client, settings, app
 
 
@@ -98,6 +105,7 @@ async def test_add_ssh_server_stores_key_in_vault(app_client):
             "host": "10.0.0.10",
             "access_mode": "ssh",
             "ssh_private_key": _FAKE_KEY,
+            "environment": "prod",
             "labels": {"env": "prod"},
         },
     )
@@ -126,6 +134,7 @@ async def test_list_servers_shows_added(app_client):
             "host": "10.0.0.11",
             "access_mode": "ssh",
             "ssh_private_key": _FAKE_KEY,
+            "environment": "prod",
         },
     )
 
@@ -146,6 +155,7 @@ async def test_connectivity_test_endpoint_ok(app_client):
             "host": "10.0.0.12",
             "access_mode": "ssh",
             "ssh_private_key": _FAKE_KEY,
+            "environment": "prod",
         },
     )
     server_id = created.json()["data"]["id"]
@@ -166,6 +176,7 @@ async def test_delete_server_writes_audit(app_client):
             "host": "10.0.0.13",
             "access_mode": "ssh",
             "ssh_private_key": _FAKE_KEY,
+            "environment": "prod",
         },
     )
     server_id = created.json()["data"]["id"]
@@ -179,6 +190,54 @@ async def test_delete_server_writes_audit(app_client):
         rows = await AuditService(session).search(action="server.delete")
     assert any(r.target == f"server:{server_id}" for r in rows)
     assert all(r.result == AuditResult.SUCCESS for r in rows)
+
+
+async def _create_env(client, token, name, *, requires_approval=False):
+    return await client.post(
+        "/api/environments",
+        headers=_auth(token),
+        json={"name": name, "requires_approval": requires_approval},
+    )
+
+
+async def test_add_ssh_server_with_environment(app_client):
+    """纳管时归属已存在的环境:environment 落库并回显(需求2)。"""
+    client, _, _ = app_client
+    token = await _token(client, "admin", "admin-pw")
+    await _create_env(client, token, "prod")
+
+    resp = await client.post(
+        "/api/servers",
+        headers=_auth(token),
+        json={
+            "name": "web-env-01",
+            "host": "10.0.0.40",
+            "access_mode": "ssh",
+            "ssh_private_key": _FAKE_KEY,
+            "environment": "prod",
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["data"]["environment"] == "prod"
+
+
+async def test_add_server_rejects_unknown_environment(app_client):
+    """归属不存在的环境应 422：环境是纳管归属的真相源，软校验拦截拼错/未建环境。"""
+    client, _, _ = app_client
+    token = await _token(client, "admin", "admin-pw")
+
+    resp = await client.post(
+        "/api/servers",
+        headers=_auth(token),
+        json={
+            "name": "web-env-02",
+            "host": "10.0.0.41",
+            "access_mode": "ssh",
+            "ssh_private_key": _FAKE_KEY,
+            "environment": "nonexistent-env",
+        },
+    )
+    assert resp.status_code == 422
 
 
 async def test_add_server_requires_auth(app_client):

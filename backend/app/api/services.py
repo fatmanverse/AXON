@@ -33,7 +33,7 @@ from app.core.responses import ok
 from app.core.secrets import SecretStore
 from app.models.approval import ApprovalAction
 from app.models.audit import AuditResult
-from app.models.service import Runtime, Service, ServiceEnvironment
+from app.models.service import Runtime, Service
 from app.models.task import TaskStatus, TaskType
 from app.models.user import User
 from app.schemas.deployment import DeploymentOut
@@ -54,6 +54,7 @@ from app.services.approval_repository import ApprovalRepository
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
 from app.services.config_delivery_repository import ConfigDeliveryRepository
+from app.services.environment_repository import EnvironmentRepository
 from app.services.config_delivery_service import ConfigDeliveryService
 from app.services.deployment_repository import DeploymentRepository
 from app.services.deployment_service import DeploymentService, DeployRequest
@@ -84,23 +85,23 @@ def _require_service_permission(user: User, service: Service, action: TaskType) 
     """按 service.env 校验用户是否有权对该服务执行此动作,无权抛 403。"""
     required = Permission(
         resource="service",
-        env=service.env.value,
+        env=service.env,
         action=_ACTION_PERMISSION[action],
     )
     if not AuthService.permission_set(user).allows(required):
         raise AppError("forbidden", f"缺少权限: {required}", status_code=403)
 
 
-def _require_write_permission(user: User, env: ServiceEnvironment) -> None:
+def _require_write_permission(user: User, env: str) -> None:
     """创建服务按目标环境校验 service:{env}:write,无权抛 403。"""
-    required = Permission(resource="service", env=env.value, action="write")
+    required = Permission(resource="service", env=env, action="write")
     if not AuthService.permission_set(user).allows(required):
         raise AppError("forbidden", f"缺少权限: {required}", status_code=403)
 
 
 def _require_config_permission(user: User, service: Service) -> None:
     """配置的写/切版按 service.env 校验 operate,与生命周期常规运维同档(§10.2)。"""
-    required = Permission(resource="service", env=service.env.value, action=_OPERATE)
+    required = Permission(resource="service", env=service.env, action=_OPERATE)
     if not AuthService.permission_set(user).allows(required):
         raise AppError("forbidden", f"缺少权限: {required}", status_code=403)
 
@@ -115,7 +116,7 @@ def _service_out(service: Service) -> dict:
 
 @router.get("")
 async def list_services(
-    env: ServiceEnvironment | None = Query(default=None, description="按环境过滤"),
+    env: str | None = Query(default=None, description="按环境过滤"),
     runtime: Runtime | None = Query(default=None, description="按运行时过滤"),
     session: AsyncSession = Depends(get_session),
     _: User = Depends(get_current_user),
@@ -138,7 +139,7 @@ async def create_service(
         actor=user.username,
         action="service.create",
         target=f"service:{service.id}",
-        env=service.env.value,
+        env=service.env,
         result=AuditResult.SUCCESS,
         after={"name": service.name, "runtime": service.runtime.value},
         ip=request.client.host if request.client else None,
@@ -174,7 +175,7 @@ async def _accept_action(
     task = await TaskRepository(session).create(
         type=action,
         target=f"service:{service_id}",
-        payload={"env": service.env.value, "runtime": service.runtime.value},
+        payload={"env": service.env, "runtime": service.runtime.value},
         created_by=user.username,
     )
     task_id = task.id
@@ -183,7 +184,7 @@ async def _accept_action(
         actor=user.username,
         action=f"service.{action.value}",
         target=f"service:{service_id}",
-        env=service.env.value,
+        env=service.env,
         result=AuditResult.SUCCESS,
         after={"task_id": task_id, "action": action.value},
         ip=request.client.host if request.client else None,
@@ -213,6 +214,7 @@ async def _accept_action(
             version=service.desired_version or "",
             operator=user.username,
             action="删除",
+            should_notify=await _env_requires_approval(session, service.env),
         )
 
     accepted = TaskAccepted(task_id=task_id, status=task.status)
@@ -374,6 +376,17 @@ async def delete_service(
     )
 
 
+async def _env_requires_approval(session: AsyncSession, env_name: str) -> bool:
+    """该环境是否声明需要审批(§10.2)。真相源是 environments 表的 requires_approval,
+    取代旧的 `env == 'prod'` 硬编码——环境是否高危由环境自身声明,而非环境名。
+
+    环境不存在(理论上服务的 env 都应先建环境)时保守视为不需审批,避免误挡;环境
+    存在与否的强校验在纳管/建服务入口做,此处只读判定。
+    """
+    env = await EnvironmentRepository(session).get_by_name(env_name)
+    return bool(env and env.requires_approval)
+
+
 def _notify_key_operation(
     *,
     request: Request,
@@ -382,19 +395,21 @@ def _notify_key_operation(
     action: str,
     version: str,
     operator: str,
+    should_notify: bool,
 ) -> None:
-    """prod 关键操作(部署/删除/回滚)推送 IM 通知(§13 通知触达)。
+    """关键操作(部署/删除/回滚)推送 IM 通知(§13 通知触达)。
 
     通知是旁路:未配置渠道时 build_notifier 返回 NoopNotifier(静默不发),后台任务
-    执行,失败只记日志不阻断主流程。只对 prod 通知——dev/staging 高频操作不打扰值班。
+    执行,失败只记日志不阻断主流程。是否通知由调用方按环境的 requires_approval 决定
+    (should_notify)——只对需审批的高危环境通知,高频常规环境不打扰值班。
     """
     settings = request.app.state.settings
-    if service.env != ServiceEnvironment.PROD:
+    if not should_notify:
         return
     notifier = build_notifier(settings)
     message = format_deploy_message(
         service=service.name,
-        env=service.env.value,
+        env=service.env,
         version=version,
         operator=operator,
         action=action,
@@ -411,17 +426,20 @@ async def _maybe_create_prod_approval(
     session: AsyncSession,
     user: User,
 ) -> str | None:
-    """prod 高危操作(deploy/delete/rollback)在开关开启时落 pending 审批(§10.2/§13)。
+    """高危操作(deploy/delete/rollback)在环境声明需审批且总开关开启时落 pending 审批。
 
     返回 approval_id 表示已进审批(调用方据此返回 pending 响应,不执行);返回 None
-    表示无需审批(dev/staging 或未开开关),调用方按原路径直接执行。审批发起入审计。
+    表示无需审批(环境未声明 requires_approval 或未开总开关),调用方按原路径直接执行。
+    审批发起入审计。是否审批的真相源是 environments.requires_approval(§10.2)。
     """
     settings = request.app.state.settings
-    if service.env != ServiceEnvironment.PROD or not settings.require_prod_approval:
+    if not settings.require_prod_approval or not await _env_requires_approval(
+        session, service.env
+    ):
         return None
     approval = await ApprovalRepository(session).create(
         service_id=service.id,
-        env=service.env.value,
+        env=service.env,
         action=action,
         payload=payload,
         requested_by=user.username,
@@ -430,7 +448,7 @@ async def _maybe_create_prod_approval(
         actor=user.username,
         action=f"service.{action.value}.request_approval",
         target=f"service:{service.id}",
-        env=service.env.value,
+        env=service.env,
         result=AuditResult.SUCCESS,
         after={"approval_id": approval.id, "action": action.value},
         ip=request.client.host if request.client else None,
@@ -460,7 +478,7 @@ async def _start_deploy(
     task = await TaskRepository(session).create(
         type=TaskType.DEPLOY,
         target=f"service:{service.id}",
-        payload={"env": service.env.value, "version": body.version},
+        payload={"env": service.env, "version": body.version},
         created_by=operator,
     )
     task_id = task.id
@@ -468,7 +486,7 @@ async def _start_deploy(
         actor=operator,
         action="service.deploy",
         target=f"service:{service.id}",
-        env=service.env.value,
+        env=service.env,
         result=AuditResult.SUCCESS,
         after={"task_id": task_id, "version": body.version, "strategy": body.strategy.value},
         ip=request.client.host if request.client else None,
@@ -495,6 +513,7 @@ async def _start_deploy(
         version=body.version,
         operator=operator,
         action="部署",
+        should_notify=await _env_requires_approval(session, service.env),
     )
     return task_id
 
@@ -544,7 +563,7 @@ async def deploy_service(
                 actor=user.username,
                 action="service.deploy.blocked",
                 target=f"service:{service_id}",
-                env=service.env.value,
+                env=service.env,
                 result=AuditResult.FAILED,
                 after={
                     "git_sha": body.git_sha,
@@ -625,7 +644,7 @@ async def rollback_service(
     task = await TaskRepository(session).create(
         type=TaskType.ROLLBACK,
         target=f"service:{service_id}",
-        payload={"env": service.env.value},
+        payload={"env": service.env},
         created_by=user.username,
     )
     task_id = task.id
@@ -633,7 +652,7 @@ async def rollback_service(
         actor=user.username,
         action="service.rollback",
         target=f"service:{service_id}",
-        env=service.env.value,
+        env=service.env,
         result=AuditResult.SUCCESS,
         after={"task_id": task_id},
         ip=request.client.host if request.client else None,
@@ -654,6 +673,7 @@ async def rollback_service(
         version="(上一版)",
         operator=user.username,
         action="回滚",
+        should_notify=await _env_requires_approval(session, service.env),
     )
 
     accepted = TaskAccepted(task_id=task_id, status=task.status)
@@ -697,7 +717,7 @@ async def promote_service(
     task = await TaskRepository(session).create(
         type=TaskType.DEPLOY,
         target=f"service:{service_id}",
-        payload={"env": target.env.value, "promote_from": body.source_service_id},
+        payload={"env": target.env, "promote_from": body.source_service_id},
         created_by=user.username,
     )
     task_id = task.id
@@ -705,7 +725,7 @@ async def promote_service(
         actor=user.username,
         action="service.promote",
         target=f"service:{service_id}",
-        env=target.env.value,
+        env=target.env,
         result=AuditResult.SUCCESS,
         after={"task_id": task_id, "source_service_id": body.source_service_id},
         ip=request.client.host if request.client else None,
@@ -728,13 +748,13 @@ async def promote_service(
 @router.get("/{service_id}/deployments")
 async def list_deployments(
     service_id: str,
-    env: ServiceEnvironment | None = Query(default=None, description="按环境过滤"),
+    env: str | None = Query(default=None, description="按环境过滤"),
     session: AsyncSession = Depends(get_session),
     _: User = Depends(get_current_user),
 ) -> dict:
     """服务的部署历史(最新在前),供部署页与主页 feed。"""
     rows = await DeploymentRepository(session).list_for_service(
-        service_id, env=env.value if env else None
+        service_id, env=env
     )
     return ok([DeploymentOut.model_validate(r).model_dump(mode="json") for r in rows])
 
@@ -820,7 +840,7 @@ async def create_config_version(
         actor=user.username,
         action="service.config.create",
         target=f"service:{service_id}",
-        env=service.env.value,
+        env=service.env,
         result=AuditResult.SUCCESS,
         after={"version": config.version},
         ip=request.client.host if request.client else None,
@@ -846,7 +866,7 @@ async def activate_config_version(
         actor=user.username,
         action="service.config.activate",
         target=f"service:{service_id}",
-        env=service.env.value,
+        env=service.env,
         result=AuditResult.SUCCESS,
         after={"version": config.version},
         ip=request.client.host if request.client else None,
@@ -878,7 +898,7 @@ async def apply_config_version(
     task = await TaskRepository(session).create(
         type=TaskType.UPDATE_CONFIG,
         target=f"service:{service_id}",
-        payload={"env": service.env.value, "config_version": version},
+        payload={"env": service.env, "config_version": version},
         created_by=user.username,
     )
     task_id = task.id
@@ -887,7 +907,7 @@ async def apply_config_version(
         actor=user.username,
         action="service.config.apply",
         target=f"service:{service_id}",
-        env=service.env.value,
+        env=service.env,
         result=AuditResult.SUCCESS,
         after={"task_id": task_id, "version": version},
         ip=request.client.host if request.client else None,

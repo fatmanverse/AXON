@@ -2,7 +2,7 @@
 
 生命周期动作(LifecycleService)与配置下发(ConfigDeliveryService)都需要「给一台
 server 造一个 Executor」。把这段 SSHTarget 组装逻辑集中一处,避免两边各维护一份
-易漂移的实现:SSH 走 SSHExecutor(私钥经 credential_id 从保险箱取),agent 或无
+易漂移的实现:SSH 走 SSHExecutor(机密经 credential_id 从保险箱取),agent 或无
 server 走 AgentGateway 占位(§5.3)。
 """
 
@@ -30,8 +30,8 @@ def build_executor_for_server(
 
     agent 模式:注入了 agent_registry 且 server.agent_id 存在时,返回该 agent 复用的
     真实 AgentGateway(经连接管理器下发命令,§5.3/§5.4);否则退回占位形态(抛未接入
-    错误,不影响 SSH 路径)。ssh 模式从 labels 取端口/用户,私钥靠 credential_id 引用
-    保险箱。无 server 视为占位。
+    错误,不影响 SSH 路径)。ssh 模式从 labels 取端口/用户/认证方式,机密靠
+    credential_id 引用保险箱。无 server 视为占位。
     """
     if server is None or server.access_mode == AccessMode.AGENT:
         if server is not None and agent_registry is not None and server.agent_id:
@@ -44,5 +44,6 @@ def build_executor_for_server(
         port=int(labels.get("ssh_port", 22)),
         username=str(labels.get("ssh_username", "root")),
         credential_id=server.ssh_credential_id or "",
+        auth_type=str(labels.get("auth_type", "key")),
     )
     return SSHExecutor(target, secrets, connector=connector)

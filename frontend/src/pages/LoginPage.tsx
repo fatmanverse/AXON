@@ -10,6 +10,7 @@ import { LockOutlined, UserOutlined } from "@ant-design/icons";
 
 import { ApiError } from "@/api/client";
 import { useAuthStore } from "@/stores/auth";
+import { colors } from "@/theme";
 import logoSidebar from "@/assets/logo-sidebar.svg";
 
 interface LoginForm {
@@ -47,7 +48,7 @@ export function LoginPage(): React.ReactElement {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "#2F4050",
+        background: colors.sidebarBg,
       }}
     >
       <Card

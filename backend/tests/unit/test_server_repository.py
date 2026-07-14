@@ -50,6 +50,45 @@ async def test_create_get_update_and_delete_ssh_server(db):
             await ServerRepository(session).get(server_id)
 
 
+async def test_find_returns_none_when_absent_and_server_when_present(db):
+    async with db.session() as session:
+        assert await ServerRepository(session).find("missing-id") is None
+
+    payload = ServerCreate(
+        name="find-01",
+        host="10.0.0.20",
+        access_mode=AccessMode.SSH,
+        ssh_credential_id="cred_find_01",
+    )
+    async with db.session() as session:
+        created = await ServerRepository(session).create(payload)
+        server_id = created.id
+
+    async with db.session() as session:
+        found = await ServerRepository(session).find(server_id)
+        assert found is not None
+        assert found.id == server_id
+
+
+async def test_create_ssh_server_persists_environment(db):
+    """服务器归属环境:environment 字段随纳管落库并可回读(需求2)。"""
+    payload = ServerCreate(
+        name="orders-prod-01",
+        host="10.0.0.30",
+        access_mode=AccessMode.SSH,
+        ssh_credential_id="cred_env_01",
+        environment="prod",
+    )
+    async with db.session() as session:
+        created = await ServerRepository(session).create(payload)
+        server_id = created.id
+        assert created.environment == "prod"
+
+    async with db.session() as session:
+        found = await ServerRepository(session).get(server_id)
+        assert found.environment == "prod"
+
+
 async def test_create_agent_server_requires_agent_id_and_keeps_agent_metadata(db):
     with pytest.raises(ValueError, match="agent_id"):
         ServerCreate(name="agent-node", host="10.0.0.11", access_mode=AccessMode.AGENT)

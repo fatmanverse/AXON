@@ -17,7 +17,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.adapters.node_exporter import DEFAULT_PORT, NodeExporterInstaller
+from app.adapters.node_exporter import DEFAULT_PORT, DEFAULT_VERSION, NodeExporterInstaller
 from app.adapters.ssh_executor import SSHExecutor, SSHTarget
 from app.core.db import Database
 from app.core.logging import get_logger
@@ -49,17 +49,29 @@ class MonitoringBootstrapService:
         registry: PrometheusTargetRegistry,
         connector: Callable[..., Any] | None = None,
         node_exporter_port: int = DEFAULT_PORT,
+        node_exporter_version: str = DEFAULT_VERSION,
+        node_exporter_base_url: str | None = None,
     ) -> None:
         self._db = db
         self._secrets = secrets
         self._registry = registry
         self._connector = connector
         self._port = node_exporter_port
+        self._version = node_exporter_version
+        # 离线分发(需求4):设了控制面地址则 node_exporter 二进制从控制面下载端点拉,
+        # 不走 github 公网;为 None 时保持原 github 下载(向后兼容既有部署/测试)。
+        self._base_url = node_exporter_base_url
 
     async def bootstrap_server(self, server_id: str) -> BootstrapResult:
         """对一台服务器自举监控。SSH 装 node_exporter 成功后登记抓取目标。"""
         async with self._db.session() as session:
-            server = await ServerRepository(session).get(server_id)
+            server = await ServerRepository(session).find(server_id)
+            if server is None:
+                # fire-and-forget 后台任务的健壮性契约:查不到服务器(如已被删除、
+                # 或纳管事务尚未对本独立会话可见)时记录后返回,绝不抛异常——否则
+                # 异常会穿回 ASGI 栈触发 "response already started"。
+                log.warning("monitoring_bootstrap_server_missing", server_id=server_id)
+                return BootstrapResult(skipped=True, installed=False)
             access_mode = server.access_mode
             host = server.host
             labels = dict(server.labels or {})
@@ -107,7 +119,9 @@ class MonitoringBootstrapService:
         )
         executor = SSHExecutor(ssh_target, self._secrets, connector=self._connector)
         try:
-            await NodeExporterInstaller(executor).ensure_installed(port=self._port)
+            await NodeExporterInstaller(executor).ensure_installed(
+                version=self._version, port=self._port, base_url=self._base_url
+            )
             return True
         except Exception as exc:
             log.warning(

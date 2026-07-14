@@ -12,7 +12,6 @@ from app.models.service import (
     ObservedStatus,
     Runtime,
     Service,
-    ServiceEnvironment,
     ServicePlacement,
 )
 from app.schemas.service import PlacementCreate, ServiceCreate
@@ -47,7 +46,7 @@ class ServiceRepository:
     async def list_services(
         self,
         *,
-        env: ServiceEnvironment | None = None,
+        env: str | None = None,
         runtime: Runtime | None = None,
     ) -> Sequence[Service]:
         """列出服务(可按 env/runtime 过滤),预加载 placements 供计数。

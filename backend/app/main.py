@@ -7,10 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.adapters.agent_gateway_registry import AgentGatewayRegistry
 from app.api import (
+    dist,
     alerts,
     approvals,
     auth,
     deployments,
+    environments,
     health,
     metrics,
     servers,
@@ -141,7 +143,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     register_exception_handlers(app)
     app.include_router(health.router)
+    app.include_router(dist.router)
     app.include_router(auth.router)
+    app.include_router(environments.router)
     app.include_router(servers.router)
     app.include_router(services.router)
     app.include_router(deployments.router)

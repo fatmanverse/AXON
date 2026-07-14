@@ -42,6 +42,9 @@ class Server(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
     host: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    # 归属环境:引用 environments.name(字符串软关联,非外键——与 services.env 一致的
+    # 语义,环境存在性在纳管 API 层软校验)。nullable 兼容历史无环境归属的服务器。
+    environment: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     access_mode: Mapped[AccessMode] = mapped_column(
         Enum(AccessMode, name="server_access_mode", values_callable=_enum_values), nullable=False
     )

@@ -41,7 +41,11 @@ services:
       context: ./backend
     environment:
       YIMAI_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-yimai}:${POSTGRES_PASSWORD:-yimai}@postgres:5432/${POSTGRES_DB:-yimai}
-    command: ["alembic", "upgrade", "head"]
+      # 首次部署灌种子管理员;可在 .env 覆盖,默认 admin/admin(登录后请立即改密)
+      YIMAI_SEED_ADMIN_USER: ${YIMAI_SEED_ADMIN_USER:-admin}
+      YIMAI_SEED_ADMIN_PASSWORD: ${YIMAI_SEED_ADMIN_PASSWORD:-admin}
+    # 建表后灌种子;seed 幂等(账号已存在则跳过),重复执行安全
+    command: ["sh", "-c", "alembic upgrade head && python -m app.cli.seed"]
     depends_on:
       postgres:
         condition: service_healthy
