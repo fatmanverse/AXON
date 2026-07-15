@@ -3,8 +3,8 @@ FROM node:22-slim AS build
 
 WORKDIR /app
 
-# 先装依赖利用层缓存。构建容器内无宿主机代理,直连 npm 官方源会超时,
-# 故走国内镜像源(npmmirror)并放宽超时/重试,避免偶发网络抖动导致 npm 崩溃。
+# 先装依赖利用层缓存。构建期出网依赖 compose 透传的 HTTP(S)_PROXY(内网服务器容器
+# 无直连外网能力,DNS 亦不通);走国内镜像源(npmmirror)并放宽超时/重试兜底网络抖动。
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund \
       --registry=https://registry.npmmirror.com \

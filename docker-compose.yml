@@ -5,6 +5,16 @@
 # 显式项目名:仓库目录名含中文,compose 无法从目录推导,须固定
 name: yimai-axon
 
+# 构建期代理透传:部分部署环境(如内网服务器)容器无直连外网能力(DNS 亦不通),
+# npm/uv 装依赖必须经宿主机代理出网。HTTP_PROXY 等为 Docker 预定义 build-arg,
+# 无需在 Dockerfile 声明 ARG 即注入 RUN 步骤,且不写入镜像历史。
+# 直连网络环境下变量为空,行为等同未设置,两端通用。
+# 仅构建期生效;运行期容器间互访(api→prometheus 等)不得走代理,故不进 environment。
+x-build-proxy: &build-proxy
+  HTTP_PROXY: ${HTTP_PROXY:-}
+  HTTPS_PROXY: ${HTTPS_PROXY:-}
+  NO_PROXY: ${NO_PROXY:-}
+
 services:
   postgres:
     image: postgres:15-alpine
@@ -39,6 +49,7 @@ services:
   migrate:
     build:
       context: ./backend
+      args: *build-proxy
     environment:
       YIMAI_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-yimai}:${POSTGRES_PASSWORD:-yimai}@postgres:5432/${POSTGRES_DB:-yimai}
       # 首次部署灌种子管理员;可在 .env 覆盖,默认 admin/admin(登录后请立即改密)
@@ -54,6 +65,7 @@ services:
   api:
     build:
       context: ./backend
+      args: *build-proxy
     environment:
       YIMAI_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-yimai}:${POSTGRES_PASSWORD:-yimai}@postgres:5432/${POSTGRES_DB:-yimai}
       YIMAI_REDIS_URL: redis://redis:6379/0
@@ -81,6 +93,7 @@ services:
   worker:
     build:
       context: ./backend
+      args: *build-proxy
     environment:
       YIMAI_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-yimai}:${POSTGRES_PASSWORD:-yimai}@postgres:5432/${POSTGRES_DB:-yimai}
       YIMAI_REDIS_URL: redis://redis:6379/0
@@ -94,6 +107,7 @@ services:
   beat:
     build:
       context: ./backend
+      args: *build-proxy
     environment:
       YIMAI_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-yimai}:${POSTGRES_PASSWORD:-yimai}@postgres:5432/${POSTGRES_DB:-yimai}
       YIMAI_REDIS_URL: redis://redis:6379/0
@@ -105,6 +119,7 @@ services:
   flower:
     build:
       context: ./backend
+      args: *build-proxy
     environment:
       YIMAI_REDIS_URL: redis://redis:6379/0
     ports:
@@ -117,6 +132,7 @@ services:
   frontend:
     build:
       context: ./frontend
+      args: *build-proxy
     ports:
       - "${FRONTEND_PORT:-5173}:80"
     depends_on:
