@@ -42,13 +42,9 @@ import {
   testConnection,
 } from "@/api/servers";
 import { pollTaskUntilDone } from "@/api/taskPolling";
+import { AGENT_STATUS } from "@/constants/status";
+import { Muted } from "@/components/Muted";
 import { colors } from "@/theme";
-
-const AGENT_STATUS_TAG: Record<AgentStatus, { color: string; label: string }> = {
-  online: { color: colors.success, label: "在线" },
-  offline: { color: colors.danger, label: "离线" },
-  unknown: { color: "default", label: "未知" },
-};
 
 interface ServerFormValues {
   name: string;
@@ -183,7 +179,7 @@ export function ServersPage(): React.ReactElement {
       key: "environment",
       width: 100,
       render: (env: string | null) =>
-        env ? <Tag>{env}</Tag> : <span style={{ color: "#B0B3B5" }}>—</span>,
+        env ? <Tag>{env}</Tag> : <Muted />,
     },
     {
       title: "接入模式",
@@ -201,9 +197,9 @@ export function ServersPage(): React.ReactElement {
       width: 100,
       render: (status: AgentStatus, row) => {
         if (row.access_mode === "ssh") {
-          return <span style={{ color: "#B0B3B5" }}>—</span>;
+          return <Muted />;
         }
-        const tag = AGENT_STATUS_TAG[status];
+        const tag = AGENT_STATUS[status];
         return <Tag color={tag.color}>{tag.label}</Tag>;
       },
     },

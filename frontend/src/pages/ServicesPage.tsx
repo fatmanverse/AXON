@@ -42,6 +42,7 @@ import {
 import { pollTaskUntilDone } from "@/api/taskPolling";
 import { TableToolbar, type ColumnToggle } from "@/components/TableToolbar";
 import { colors } from "@/theme";
+import { Muted } from "@/components/Muted";
 
 const ENV_TAG: Record<ServiceEnvironment, string> = {
   dev: "default",
@@ -133,7 +134,7 @@ function ServiceDetailDrawer({
           </Descriptions.Item>
           <Descriptions.Item label="放置数">{service.placement_count}</Descriptions.Item>
           <Descriptions.Item label="期望版本">
-            {service.desired_version ?? <span style={{ color: "#B0B3B5" }}>—</span>}
+            {service.desired_version ?? <Muted />}
           </Descriptions.Item>
           <Descriptions.Item label="重启方式">{service.reload_mode}</Descriptions.Item>
           <Descriptions.Item label="运行时目标">
@@ -250,7 +251,7 @@ export function ServicesPage(): React.ReactElement {
       dataIndex: "desired_version",
       key: "desired_version",
       render: (v: string | null) =>
-        v ? v : <span style={{ color: "#B0B3B5" }}>—</span>,
+        v ? v : <Muted />,
     },
     {
       title: "操作",

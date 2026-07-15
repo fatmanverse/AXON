@@ -12,18 +12,9 @@ import { useQuery } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/client";
 import { type Alert, type AlertSeverity, type AlertStatus, listAlerts } from "@/api/alerts";
+import { Muted } from "@/components/Muted";
+import { ALERT_SEVERITY, ALERT_STATUS } from "@/constants/status";
 import { colors } from "@/theme";
-
-const SEVERITY_TAG: Record<AlertSeverity, { color: string; label: string }> = {
-  critical: { color: colors.danger, label: "严重" },
-  warning: { color: colors.warning, label: "警告" },
-  info: { color: "default", label: "提示" },
-};
-
-const STATUS_TAG: Record<AlertStatus, { color: string; label: string }> = {
-  firing: { color: colors.danger, label: "触发中" },
-  resolved: { color: colors.success, label: "已恢复" },
-};
 
 type StatusFilter = "all" | AlertStatus;
 
@@ -48,7 +39,7 @@ export function AlertsPage(): React.ReactElement {
       key: "severity",
       width: 80,
       render: (s: AlertSeverity) => {
-        const conf = SEVERITY_TAG[s];
+        const conf = ALERT_SEVERITY[s];
         return <Tag color={conf.color}>{conf.label}</Tag>;
       },
     },
@@ -63,7 +54,7 @@ export function AlertsPage(): React.ReactElement {
       dataIndex: "service",
       key: "service",
       width: 140,
-      render: (v: string | null) => v ?? <span style={{ color: "#B0B3B5" }}>—</span>,
+      render: (v: string | null) => v ?? <Muted />,
     },
     {
       title: "状态",
@@ -71,7 +62,7 @@ export function AlertsPage(): React.ReactElement {
       key: "status",
       width: 90,
       render: (s: AlertStatus) => {
-        const conf = STATUS_TAG[s];
+        const conf = ALERT_STATUS[s];
         return <Tag color={conf.color}>{conf.label}</Tag>;
       },
     },
@@ -81,7 +72,7 @@ export function AlertsPage(): React.ReactElement {
       key: "fired_at",
       width: 180,
       render: (t: string | null) =>
-        t ? new Date(t).toLocaleString("zh-CN") : <span style={{ color: "#B0B3B5" }}>—</span>,
+        t ? new Date(t).toLocaleString("zh-CN") : <Muted />,
     },
   ];
 

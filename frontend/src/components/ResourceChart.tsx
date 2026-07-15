@@ -33,7 +33,7 @@ interface ResourceChartProps {
   markers?: DeployMarker[];
 }
 
-const PALETTE = [colors.primary, colors.info, colors.warning, colors.danger, "#9B59B6"];
+const PALETTE = [colors.primary, colors.info, colors.warning, colors.danger, colors.chartViolet];
 
 export function ResourceChart({
   title,
@@ -74,7 +74,7 @@ export function ResourceChart({
     yAxis: {
       type: "value",
       axisLabel: { fontSize: 11, color: colors.textBody, formatter: `{value}${unit}` },
-      splitLine: { lineStyle: { color: "#F0F0F0" } },
+      splitLine: { lineStyle: { color: colors.chartSplitLine } },
     },
     series: series.map((s, idx) => ({
       name: s.name,

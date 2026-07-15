@@ -1,4 +1,4 @@
-/* 全局基线:系统字体栈(不引入 Google Fonts),紧凑密度,浅灰底。 */
+/* 全局基线:系统字体栈(不引入 Google Fonts),现代化收敛后的密度与质感。 */
 
 * {
   box-sizing: border-box;
@@ -14,11 +14,14 @@ body,
 
 body {
   font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
-  font-size: 13px;
-  color: #676a6c;
-  background: #f3f3f4;
+    "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "微软雅黑", Roboto, -apple-system, BlinkMacSystemFont,
+    sans-serif;
+  font-size: 14px;
+  color: #5a5e62;
+  background: #f4f5f7;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 a {
@@ -27,10 +30,48 @@ a {
 }
 
 /*
- * JumpServer/INSPINIA 招牌选中态:深色侧栏当前菜单项左侧 3px 经典绿高亮条。
- * AntD 深色 Menu 无对应 token,用 inset box-shadow 画左条——不占布局、不引起
- * 位移,展开与折叠(图标条)两种形态都生效。仅作用于叶子菜单项,不动分组标题。
+ * 侧栏当前菜单项左侧 3px 经典绿高亮条(INSPINIA 招牌)。菜单项现在有 6px 圆角与
+ * 内缩边距,高亮条随之内收并与圆角对齐,不再贴死屏幕左缘。
  */
 .ant-menu-dark .ant-menu-item-selected {
   box-shadow: inset 3px 0 0 0 #1ab394;
+}
+
+/* 交互过渡:菜单/按钮/表格行的状态切换更顺滑,避免生硬跳变。 */
+.ant-menu-item,
+.ant-btn,
+.ant-table-tbody > tr > td {
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+/* 卡片悬浮微抬升:列表/看板卡片给一点点反馈,克制不浮夸。 */
+.ant-card {
+  transition:
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+/*
+ * 自定义滚动条:默认粗灰滚动条是"脚手架感"的重要来源。收窄 + 淡色 + hover 变深,
+ * 贴合专业后台的精致度。仅作用于 WebKit 内核。
+ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d4d7dc;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #b4b8bf;
 }

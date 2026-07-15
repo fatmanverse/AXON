@@ -152,7 +152,7 @@ function ConfigPanel({ serviceId }: { serviceId: string }): React.ReactElement {
         p ? (
           <span style={{ fontFamily: "monospace", fontSize: 12 }}>{p}</span>
         ) : (
-          <span style={{ color: "#B0B3B5" }}>未设置</span>
+          <span style={{ color: colors.textPlaceholder }}>未设置</span>
         ),
     },
     { title: "修改人", dataIndex: "created_by", key: "created_by", width: 100 },
@@ -224,7 +224,7 @@ function ConfigPanel({ serviceId }: { serviceId: string }): React.ReactElement {
         const map = {
           success: { color: colors.success, label: "成功" },
           failed: { color: colors.danger, label: "失败" },
-          pending: { color: "#8C8C8C", label: "待下发" },
+          pending: { color: colors.neutral, label: "待下发" },
         } as const;
         const { color, label } = map[s];
         return <Tag color={color}>{label}</Tag>;
@@ -351,9 +351,9 @@ function ConfigPanel({ serviceId }: { serviceId: string }): React.ReactElement {
             {diffData.lines.map((line, idx) => {
               const style =
                 line.kind === "added"
-                  ? { background: "#F6FFED", color: "#237804" }
+                  ? { background: colors.diffAddBg, color: colors.diffAddText }
                   : line.kind === "removed"
-                    ? { background: "#FFF1F0", color: "#A8071A" }
+                    ? { background: colors.diffRemoveBg, color: colors.diffRemoveText }
                     : { color: colors.textBody };
               const prefix =
                 line.kind === "added" ? "+ " : line.kind === "removed" ? "- " : "  ";

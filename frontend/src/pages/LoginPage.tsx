@@ -10,7 +10,7 @@ import { LockOutlined, UserOutlined } from "@ant-design/icons";
 
 import { ApiError } from "@/api/client";
 import { useAuthStore } from "@/stores/auth";
-import { colors } from "@/theme";
+import { colors, shadows } from "@/theme";
 import logoSidebar from "@/assets/logo-sidebar.svg";
 
 interface LoginForm {
@@ -48,21 +48,33 @@ export function LoginPage(): React.ReactElement {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: colors.sidebarBg,
+        padding: 20,
+        // 深墨蓝灰的层次背景 + 两处极淡径向光晕(品牌绿点缀),避免死板纯色。
+        // 不用紫蓝渐变/霓虹(规范禁项),只做低对比度的氛围铺垫。
+        background: `radial-gradient(900px 500px at 18% 12%, rgba(26,179,148,.10), transparent 60%),
+          radial-gradient(760px 480px at 88% 88%, rgba(28,132,198,.08), transparent 55%),
+          linear-gradient(135deg, #2B3A49 0%, #2F4050 45%, #26333F 100%)`,
       }}
     >
       <Card
-        style={{ width: 360 }}
-        styles={{ body: { padding: "28px 32px" } }}
+        style={{ width: 372, borderRadius: 12, boxShadow: shadows.raise }}
+        styles={{ body: { padding: "36px 36px 32px" } }}
         variant="borderless"
       >
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
           <img
             src={logoSidebar}
             alt="一脉 Axon"
-            style={{ height: 30, filter: "invert(0.15)" }}
+            style={{ height: 32, filter: "invert(0.15)" }}
           />
-          <div style={{ marginTop: 8, color: "#676A6C", fontSize: 13 }}>
+          <div
+            style={{
+              marginTop: 10,
+              color: colors.textMuted,
+              fontSize: 13,
+              letterSpacing: 0.5,
+            }}
+          >
             统一运维控制面
           </div>
         </div>

@@ -14,6 +14,7 @@ import { ConfigProvider } from "antd";
 import { ServersPage } from "@/pages/ServersPage";
 import { http } from "@/api/client";
 import type { Server } from "@/api/servers";
+import type { Environment } from "@/api/environments";
 
 let mock: MockAdapter;
 
@@ -40,10 +41,19 @@ const SSH_SERVER: Server = {
   host: "10.0.0.10",
   access_mode: "ssh",
   ssh_credential_id: "cred-1",
+  environment: null,
   agent_id: null,
   agent_status: "unknown",
   agent_version: null,
   labels: {},
+};
+
+const ENV_PROD: Environment = {
+  id: "e1",
+  name: "prod",
+  display_name: "生产",
+  requires_approval: true,
+  description: null,
 };
 
 beforeEach(() => {
@@ -87,6 +97,7 @@ describe("ServersPage", () => {
 
   it("纳管 SSH 服务器后刷新列表", async () => {
     mock.onGet("/api/servers").replyOnce(200, ok([]));
+    mock.onGet("/api/environments").reply(200, ok([ENV_PROD]));
     mock.onPost("/api/servers").reply(201, ok(SSH_SERVER));
     mock.onGet("/api/servers").reply(200, ok([SSH_SERVER]));
 
@@ -99,6 +110,8 @@ describe("ServersPage", () => {
 
     await user.type(within(drawer).getByPlaceholderText("如 web-01"), "web-01");
     await user.type(within(drawer).getByPlaceholderText("如 10.0.0.10"), "10.0.0.10");
+    await user.click(within(drawer).getByRole("combobox"));
+    await user.click(await screen.findByText("生产 (prod)"));
     await user.type(
       within(drawer).getByPlaceholderText("-----BEGIN OPENSSH PRIVATE KEY-----"),
       "fake-key",

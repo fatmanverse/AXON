@@ -54,6 +54,7 @@ const SERVER_A: Server = {
   name: "web-01",
   host: "10.0.0.10",
   access_mode: "ssh",
+  environment: null,
   ssh_credential_id: "c1",
   agent_id: null,
   agent_status: "unknown",

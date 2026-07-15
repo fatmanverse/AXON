@@ -11,11 +11,14 @@ import { render } from "@testing-library/react";
 
 import type { LineSeries } from "@/api/metricsTransform";
 
-// 捕获传给 ECharts 的 option,供断言。
-let capturedOption: any = null;
+// 捕获传给 ECharts 的 option,供断言。仅需断言 series[0].markLine 结构。
+interface CapturedOption {
+  series: Array<{ markLine?: { data: Array<Record<string, unknown>> } }>;
+}
+let capturedOption: CapturedOption | null = null;
 vi.mock("echarts-for-react", () => ({
   default: ({ option }: { option: unknown }) => {
-    capturedOption = option;
+    capturedOption = option as CapturedOption;
     return <div data-testid="echart" />;
   },
 }));
@@ -34,16 +37,16 @@ describe("ResourceChart 部署标注", () => {
     ];
     render(<ResourceChart title="CPU" series={SERIES} markers={markers} />);
 
-    const first = capturedOption.series[0];
+    const first = capturedOption!.series[0];
     expect(first.markLine).toBeTruthy();
-    expect(first.markLine.data).toHaveLength(2);
-    expect(first.markLine.data[0]).toMatchObject({ xAxis: 1720000030000, name: "v1.2.0" });
-    expect(first.markLine.data[1]).toMatchObject({ xAxis: 1720000050000, name: "v1.2.1" });
+    expect(first.markLine!.data).toHaveLength(2);
+    expect(first.markLine!.data[0]).toMatchObject({ xAxis: 1720000030000, name: "v1.2.0" });
+    expect(first.markLine!.data[1]).toMatchObject({ xAxis: 1720000050000, name: "v1.2.1" });
   });
 
   it("不传 markers 时不挂 markLine", () => {
     capturedOption = null;
     render(<ResourceChart title="CPU" series={SERIES} />);
-    expect(capturedOption.series[0].markLine).toBeUndefined();
+    expect(capturedOption!.series[0].markLine).toBeUndefined();
   });
 });

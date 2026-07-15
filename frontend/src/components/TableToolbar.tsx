@@ -91,7 +91,7 @@ export function TableToolbar({
           <Input
             size="small"
             allowClear
-            prefix={<SearchOutlined style={{ color: "#B0B3B5" }} />}
+            prefix={<SearchOutlined style={{ color: colors.textPlaceholder }} />}
             placeholder={searchPlaceholder}
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}

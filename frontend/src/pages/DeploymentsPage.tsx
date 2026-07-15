@@ -42,14 +42,9 @@ import {
   rollbackService,
 } from "@/api/deployments";
 import { pollTaskUntilDone } from "@/api/taskPolling";
+import { Muted } from "@/components/Muted";
+import { DEPLOYMENT_STATUS } from "@/constants/status";
 import { colors } from "@/theme";
-
-const STATUS_TAG: Record<DeploymentStatus, { color: string; label: string }> = {
-  running: { color: colors.warning, label: "部署中" },
-  success: { color: colors.success, label: "成功" },
-  failed: { color: colors.danger, label: "失败" },
-  rolled_back: { color: "#8C8C8C", label: "已回滚" },
-};
 
 // 发布策略选项(§11)。canary/blue-green 目前后端仅 k8s+Argo 支持,裸机会明确报错;
 // 这里全部列出,由后端按 runtime 决定是否受理,不受理时回显后端的 501 提示。
@@ -149,7 +144,7 @@ function DeploymentsTab({ serviceId }: { serviceId: string }): React.ReactElemen
       title: "版本",
       dataIndex: "version",
       key: "version",
-      render: (v: string | null) => v ?? <span style={{ color: "#B0B3B5" }}>—</span>,
+      render: (v: string | null) => v ?? <Muted />,
     },
     {
       title: "状态",
@@ -157,7 +152,7 @@ function DeploymentsTab({ serviceId }: { serviceId: string }): React.ReactElemen
       key: "status",
       width: 90,
       render: (s: DeploymentStatus) => {
-        const tag = STATUS_TAG[s];
+        const tag = DEPLOYMENT_STATUS[s];
         return <Tag color={tag.color}>{tag.label}</Tag>;
       },
     },
@@ -166,14 +161,14 @@ function DeploymentsTab({ serviceId }: { serviceId: string }): React.ReactElemen
       title: "操作人",
       dataIndex: "operator",
       key: "operator",
-      render: (o: string | null) => o ?? <span style={{ color: "#B0B3B5" }}>—</span>,
+      render: (o: string | null) => o ?? <Muted />,
     },
     {
       title: "开始时间",
       dataIndex: "started_at",
       key: "started_at",
       render: (t: string | null) =>
-        t ? new Date(t).toLocaleString("zh-CN") : <span style={{ color: "#B0B3B5" }}>—</span>,
+        t ? new Date(t).toLocaleString("zh-CN") : <Muted />,
     },
     {
       title: "扫描",
@@ -273,7 +268,7 @@ function DeploymentsTab({ serviceId }: { serviceId: string }): React.ReactElemen
                       查看
                     </a>
                   ) : (
-                    <span style={{ color: "#B0B3B5" }}>—</span>
+                    <Muted />
                   ),
               },
             ]}
