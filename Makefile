@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := help
 COMPOSE := docker compose
 
-.PHONY: help up down logs ps restart build \
+.PHONY: help up down logs ps restart build upgrade \
         backend-install backend-dev backend-test backend-lint migrate seed \
         frontend-install frontend-dev frontend-test frontend-build frontend-lint \
         test lint
@@ -31,6 +31,9 @@ restart: ## 重启全部服务
 
 build: ## 仅构建镜像
 	$(COMPOSE) build
+
+upgrade: ## 一键升级(打包镜像→备份→迁移→重建→健康校验,失败自动回滚)
+	./ops/upgrade.sh
 
 # ---- 后端(本地开发)----
 backend-install: ## 安装后端依赖(uv)
