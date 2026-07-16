@@ -6,15 +6,16 @@
  */
 
 import { useState } from "react";
-import { Result, Segmented, Skeleton, Table, Tag } from "antd";
+import { Card, Result, Segmented, Skeleton, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useQuery } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/client";
 import { type Alert, type AlertSeverity, type AlertStatus, listAlerts } from "@/api/alerts";
 import { Muted } from "@/components/Muted";
+import { PageHeader } from "@/components/PageHeader";
 import { ALERT_SEVERITY, ALERT_STATUS } from "@/constants/status";
-import { colors } from "@/theme";
+import { colors, shadows } from "@/theme";
 
 type StatusFilter = "all" | AlertStatus;
 
@@ -87,34 +88,30 @@ export function AlertsPage(): React.ReactElement {
 
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 12,
-        }}
-      >
-        <span style={{ fontSize: 14, fontWeight: 600, color: colors.textTitle }}>告警</span>
-        <Segmented
-          size="small"
-          value={filter}
-          onChange={(v) => setFilter(v as StatusFilter)}
-          options={FILTER_OPTIONS}
-        />
-      </div>
+      <PageHeader
+        title="告警"
+        extra={
+          <Segmented
+            size="small"
+            value={filter}
+            onChange={(v) => setFilter(v as StatusFilter)}
+            options={FILTER_OPTIONS}
+          />
+        }
+      />
       {isLoading ? (
         <Skeleton active paragraph={{ rows: 5 }} />
       ) : (
-        <Table<Alert>
-          rowKey="id"
-          size="small"
-          columns={columns}
-          dataSource={data ?? []}
-          pagination={false}
-          locale={{ emptyText: "暂无告警" }}
-          bordered
-        />
+        <Card styles={{ body: { padding: 0 } }} style={{ boxShadow: shadows.card }}>
+          <Table<Alert>
+            rowKey="id"
+            size="small"
+            columns={columns}
+            dataSource={data ?? []}
+            pagination={false}
+            locale={{ emptyText: "暂无告警" }}
+          />
+        </Card>
       )}
     </div>
   );

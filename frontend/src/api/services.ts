@@ -8,7 +8,8 @@
 
 import { api } from "./client";
 
-export type ServiceEnvironment = "dev" | "staging" | "prod";
+// env 为任意已创建的自定义环境名(后端 service.env 为字符串,不再是固定枚举)。
+export type ServiceEnvironment = string;
 export type Runtime = "k8s" | "docker" | "systemd" | "process" | "cloud-fn";
 export type ReloadMode = "reload" | "restart";
 export type LifecycleAction = "start" | "stop" | "restart" | "delete";

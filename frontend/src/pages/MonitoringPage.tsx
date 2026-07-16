@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { Card, Col, Empty, Result, Row, Segmented, Select, Skeleton, Space } from "antd";
+import { Card, Col, Empty, Result, Row, Segmented, Select, Skeleton } from "antd";
 import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/client";
@@ -19,7 +19,7 @@ import { listDeployments } from "@/api/deployments";
 import { queryRange } from "@/api/metrics";
 import { matrixToSeries } from "@/api/metricsTransform";
 import { ResourceChart, type DeployMarker } from "@/components/ResourceChart";
-import { colors } from "@/theme";
+import { PageHeader } from "@/components/PageHeader";
 
 const NODE_EXPORTER_PORT = 9100;
 
@@ -156,45 +156,40 @@ export function MonitoringPage(): React.ReactElement {
 
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 12,
-        }}
-      >
-        <Space size="middle">
-          <span style={{ fontSize: 14, fontWeight: 600, color: colors.textTitle }}>
-            资源监控
-          </span>
-          <Select
+      <PageHeader
+        title="资源监控"
+        inline={
+          <>
+            <Select
+              size="small"
+              value={selected?.id}
+              onChange={setServerId}
+              style={{ width: 200 }}
+              options={servers.map((s) => ({ label: `${s.name}（${s.host}）`, value: s.id }))}
+            />
+            <Select
+              size="small"
+              allowClear
+              placeholder="叠加部署标注（选服务）"
+              value={markerServiceId}
+              onChange={setMarkerServiceId}
+              style={{ width: 200 }}
+              options={(services ?? []).map((s) => ({
+                label: `${s.name}（${s.env}）`,
+                value: s.id,
+              }))}
+            />
+          </>
+        }
+        extra={
+          <Segmented
             size="small"
-            value={selected?.id}
-            onChange={setServerId}
-            style={{ width: 200 }}
-            options={servers.map((s) => ({ label: `${s.name}（${s.host}）`, value: s.id }))}
+            value={range}
+            onChange={(v) => setRange(v as RangeValue)}
+            options={RANGE_OPTIONS.map((r) => ({ label: r.label, value: r.value }))}
           />
-          <Select
-            size="small"
-            allowClear
-            placeholder="叠加部署标注（选服务）"
-            value={markerServiceId}
-            onChange={setMarkerServiceId}
-            style={{ width: 200 }}
-            options={(services ?? []).map((s) => ({
-              label: `${s.name}（${s.env}）`,
-              value: s.id,
-            }))}
-          />
-        </Space>
-        <Segmented
-          size="small"
-          value={range}
-          onChange={(v) => setRange(v as RangeValue)}
-          options={RANGE_OPTIONS.map((r) => ({ label: r.label, value: r.value }))}
-        />
-      </div>
+        }
+      />
 
       <Row gutter={[12, 12]}>
         {CHART_SPECS.map((spec, idx) => {

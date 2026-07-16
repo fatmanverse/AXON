@@ -263,7 +263,7 @@ function DeployFeed(): React.ReactElement {
       ) : (
         <Table<Deployment>
           rowKey="id"
-          size="middle"
+          size="small"
           columns={columns}
           dataSource={data ?? []}
           pagination={false}
@@ -319,7 +319,7 @@ function AlertPanel(): React.ReactElement {
       ) : (
         <Table<Alert>
           rowKey="id"
-          size="middle"
+          size="small"
           columns={columns}
           dataSource={data ?? []}
           pagination={false}

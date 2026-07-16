@@ -11,6 +11,7 @@ import {
   ApiOutlined,
   AuditOutlined,
   BellOutlined,
+  ClusterOutlined,
   CloudServerOutlined,
   DashboardOutlined,
   DeploymentUnitOutlined,
@@ -51,6 +52,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: "资源",
     items: [
+      { key: "/environments", label: "环境", icon: <ClusterOutlined /> },
       { key: "/servers", label: "服务器", icon: <CloudServerOutlined /> },
       { key: "/services", label: "服务", icon: <ApiOutlined /> },
     ],

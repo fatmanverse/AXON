@@ -46,11 +46,20 @@ const SVC: Service = {
   placement_count: 2,
 };
 
+// 环境列表:服务页从 /api/environments 拉取(与服务器纳管同源),供筛选/新建下拉
+// 与标签着色。测试统一 mock 此端点,否则下拉为空、按环境过滤等交互无从选起。
+const ENVS = [
+  { id: "e1", name: "dev", display_name: null, requires_approval: false, description: null },
+  { id: "e2", name: "prod", display_name: null, requires_approval: true, description: null },
+];
+
 // 忽略中文按钮里 AntD 自动插入的空格(如 "启 动")。
 const byName = (name: string) => new RegExp(name.split("").join("\\s*"));
 
 beforeEach(() => {
   mock = new MockAdapter(http);
+  // 服务页渲染即拉环境列表填充下拉;各用例统一兜底 mock,个别用例可再覆盖。
+  mock.onGet("/api/environments").reply(200, ok(ENVS));
 });
 
 afterEach(() => {

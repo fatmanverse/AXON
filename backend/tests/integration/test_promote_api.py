@@ -19,8 +19,10 @@ from app.core.db import Database
 from app.main import create_app
 from app.models.base import Base
 from app.models.deployment import DeploymentSource, DeploymentStatus
+from app.schemas.environment import EnvironmentCreate
 from app.services.auth_service import AuthService
 from app.services.deployment_repository import DeploymentRepository
+from app.services.environment_repository import EnvironmentRepository
 
 
 class _FakeAdapter(PipelineAdapter):
@@ -58,6 +60,11 @@ async def app_client(tmp_path):
                 auth = AuthService(session, settings)
                 await auth.create_user("operator", "op-pw", roles=["operator"])
                 await auth.create_user("dev", "dev-pw", roles=["developer"])
+                # 建服务须归属已存在的环境(§10.1 软校验);seed 标准三环境供各用例使用
+                env_repo = EnvironmentRepository(session)
+                await env_repo.create(EnvironmentCreate(name="dev"))
+                await env_repo.create(EnvironmentCreate(name="staging"))
+                await env_repo.create(EnvironmentCreate(name="prod"))
             yield client, settings, app
 
 

@@ -275,7 +275,7 @@ class DeploymentService:
         成功后把被回滚的当前版落 rolled_back。返回重部署的版本号。无可回滚版本抛错。"""
         async with self._db.session() as session:
             service = await ServiceRepository(session).get_service(service_id)
-            env = service.env.value
+            env = service.env
             current = await DeploymentRepository(session).latest_successful(service_id, env=env)
             if current is None:
                 raise AppError("no_rollback_target", "无可回滚的历史成功部署", status_code=409)
@@ -363,8 +363,8 @@ class DeploymentService:
             svc_repo = ServiceRepository(session)
             source = await svc_repo.get_service(source_service_id)
             target = await svc_repo.get_service(target_service_id)
-            source_env = source.env.value
-            target_env = target.env.value
+            source_env = source.env
+            target_env = target.env
 
             src_deploy = await DeploymentRepository(session).latest_successful(
                 source_service_id, env=source_env

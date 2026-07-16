@@ -41,7 +41,8 @@ import {
   listConfigVersions,
 } from "@/api/deployments";
 import { pollTaskUntilDone } from "@/api/taskPolling";
-import { colors } from "@/theme";
+import { PageHeader } from "@/components/PageHeader";
+import { colors, shadows } from "@/theme";
 
 const FORMAT_OPTIONS: { label: string; value: ConfigFormat }[] = [
   { label: "env", value: "env" },
@@ -293,15 +294,16 @@ function ConfigPanel({ serviceId }: { serviceId: string }): React.ReactElement {
       {isLoading ? (
         <Skeleton active paragraph={{ rows: 3 }} />
       ) : (
-        <Table<ConfigVersion>
-          rowKey="id"
-          size="small"
-          columns={columns}
-          dataSource={versions ?? []}
-          pagination={false}
-          locale={{ emptyText: "暂无配置版本" }}
-          bordered
-        />
+        <Card styles={{ body: { padding: 0 } }} style={{ boxShadow: shadows.card }}>
+          <Table<ConfigVersion>
+            rowKey="id"
+            size="small"
+            columns={columns}
+            dataSource={versions ?? []}
+            pagination={false}
+            locale={{ emptyText: "暂无配置版本" }}
+          />
+        </Card>
       )}
 
       <Modal
@@ -405,19 +407,21 @@ export function ConfigsPage(): React.ReactElement {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: colors.textTitle }}>配置管理</span>
-        <Select
-          size="small"
-          value={selected?.id}
-          onChange={setServiceId}
-          style={{ width: 220 }}
-          options={(services as Service[]).map((s) => ({
-            label: `${s.name}（${s.env}）`,
-            value: s.id,
-          }))}
-        />
-      </div>
+      <PageHeader
+        title="配置管理"
+        inline={
+          <Select
+            size="small"
+            value={selected?.id}
+            onChange={setServiceId}
+            style={{ width: 220 }}
+            options={(services as Service[]).map((s) => ({
+              label: `${s.name}（${s.env}）`,
+              value: s.id,
+            }))}
+          />
+        }
+      />
       {selected && <ConfigPanel serviceId={selected.id} />}
     </div>
   );

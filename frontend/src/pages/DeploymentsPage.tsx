@@ -12,6 +12,7 @@
 import { useMemo, useState } from "react";
 import {
   Button,
+  Card,
   Empty,
   Form,
   Input,
@@ -43,8 +44,9 @@ import {
 } from "@/api/deployments";
 import { pollTaskUntilDone } from "@/api/taskPolling";
 import { Muted } from "@/components/Muted";
+import { PageHeader } from "@/components/PageHeader";
 import { DEPLOYMENT_STATUS } from "@/constants/status";
-import { colors } from "@/theme";
+import { colors, shadows } from "@/theme";
 
 // 发布策略选项(§11)。canary/blue-green 目前后端仅 k8s+Argo 支持,裸机会明确报错;
 // 这里全部列出,由后端按 runtime 决定是否受理,不受理时回显后端的 501 提示。
@@ -213,15 +215,16 @@ function DeploymentsTab({ serviceId }: { serviceId: string }): React.ReactElemen
       {isLoading ? (
         <Skeleton active paragraph={{ rows: 4 }} />
       ) : (
-        <Table<Deployment>
-          rowKey="id"
-          size="small"
-          columns={columns}
-          dataSource={data ?? []}
-          pagination={false}
-          locale={{ emptyText: "暂无部署记录" }}
-          bordered
-        />
+        <Card styles={{ body: { padding: 0 } }} style={{ boxShadow: shadows.card }}>
+          <Table<Deployment>
+            rowKey="id"
+            size="small"
+            columns={columns}
+            dataSource={data ?? []}
+            pagination={false}
+            locale={{ emptyText: "暂无部署记录" }}
+          />
+        </Card>
       )}
       <Modal
         title="扫描结论与门禁"
@@ -354,21 +357,21 @@ export function DeploymentsPage(): React.ReactElement {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: colors.textTitle }}>
-          部署与配置
-        </span>
-        <Select
-          size="small"
-          value={selected?.id}
-          onChange={setServiceId}
-          style={{ width: 220 }}
-          options={(services as Service[]).map((s) => ({
-            label: `${s.name}（${s.env}）`,
-            value: s.id,
-          }))}
-        />
-      </div>
+      <PageHeader
+        title="部署与配置"
+        inline={
+          <Select
+            size="small"
+            value={selected?.id}
+            onChange={setServiceId}
+            style={{ width: 220 }}
+            options={(services as Service[]).map((s) => ({
+              label: `${s.name}（${s.env}）`,
+              value: s.id,
+            }))}
+          />
+        }
+      />
       {selected && <DeploymentsTab serviceId={selected.id} />}
     </div>
   );

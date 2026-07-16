@@ -133,6 +133,17 @@ async def create_service(
     user: User = Depends(get_current_user),
 ) -> dict:
     _require_write_permission(user, body.env)
+
+    # 归属环境软校验(§10.1):与服务器纳管一致,environments 表须已存在该环境,
+    # 否则 422。避免建出 env 指向不存在环境的悬空服务(审批判定会误判为不需审批)。
+    env = await EnvironmentRepository(session).get_by_name(body.env)
+    if env is None:
+        raise AppError(
+            "environment_not_found",
+            f"环境不存在: {body.env}，请先在环境管理中创建",
+            status_code=422,
+        )
+
     repo = ServiceRepository(session)
     service = await repo.create_service(body)
     await AuditService(session).record(

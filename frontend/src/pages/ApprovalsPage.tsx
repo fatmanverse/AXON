@@ -8,7 +8,7 @@
  */
 
 import { useState } from "react";
-import { Button, Input, Modal, Popconfirm, Result, Skeleton, Table, Tag, message } from "antd";
+import { Button, Card, Input, Modal, Popconfirm, Result, Skeleton, Table, Tag, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -19,7 +19,9 @@ import {
   listApprovals,
   rejectApproval,
 } from "@/api/approvals";
-import { colors } from "@/theme";
+import { Muted } from "@/components/Muted";
+import { PageHeader } from "@/components/PageHeader";
+import { colors, shadows } from "@/theme";
 
 const ENV_TAG: Record<string, string> = {
   dev: colors.success,
@@ -79,7 +81,7 @@ export function ApprovalsPage(): React.ReactElement {
       title: "发起人",
       dataIndex: "requested_by",
       key: "requested_by",
-      render: (v: string | null) => v ?? <span style={{ color: "#B0B3B5" }}>—</span>,
+      render: (v: string | null) => v ?? <Muted />,
     },
     {
       title: "发起时间",
@@ -124,23 +126,20 @@ export function ApprovalsPage(): React.ReactElement {
 
   return (
     <div>
-      <div style={{ marginBottom: 12 }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: colors.textTitle }}>
-          待审批(生产高危操作)
-        </span>
-      </div>
+      <PageHeader title="待审批(生产高危操作)" />
       {isLoading ? (
         <Skeleton active paragraph={{ rows: 4 }} />
       ) : (
-        <Table<Approval>
-          rowKey="id"
-          size="small"
-          columns={columns}
-          dataSource={data ?? []}
-          pagination={false}
-          locale={{ emptyText: "暂无待审批" }}
-          bordered
-        />
+        <Card styles={{ body: { padding: 0 } }} style={{ boxShadow: shadows.card }}>
+          <Table<Approval>
+            rowKey="id"
+            size="small"
+            columns={columns}
+            dataSource={data ?? []}
+            pagination={false}
+            locale={{ emptyText: "暂无待审批" }}
+          />
+        </Card>
       )}
       <Modal
         title="拒绝审批"

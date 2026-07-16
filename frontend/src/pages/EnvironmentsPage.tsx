@@ -9,6 +9,7 @@
 import { useState } from "react";
 import {
   Button,
+  Card,
   Drawer,
   Form,
   Input,
@@ -32,7 +33,8 @@ import {
   deleteEnvironment,
   listEnvironments,
 } from "@/api/environments";
-import { colors } from "@/theme";
+import { PageHeader } from "@/components/PageHeader";
+import { colors, shadows } from "@/theme";
 
 interface EnvFormValues {
   name: string;
@@ -137,32 +139,28 @@ export function EnvironmentsPage(): React.ReactElement {
 
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 12,
-        }}
-      >
-        <span style={{ fontSize: 14, fontWeight: 600, color: colors.textTitle }}>环境</span>
-        <Button type="primary" onClick={() => setDrawerOpen(true)}>
-          创建环境
-        </Button>
-      </div>
+      <PageHeader
+        title="环境"
+        extra={
+          <Button type="primary" onClick={() => setDrawerOpen(true)}>
+            创建环境
+          </Button>
+        }
+      />
 
       {isLoading ? (
         <Skeleton active paragraph={{ rows: 4 }} />
       ) : (
-        <Table<Environment>
-          rowKey="id"
-          size="small"
-          columns={columns}
-          dataSource={data ?? []}
-          pagination={false}
-          locale={{ emptyText: "暂无环境,点击右上角创建第一个" }}
-          bordered
-        />
+        <Card styles={{ body: { padding: 0 } }} style={{ boxShadow: shadows.card }}>
+          <Table<Environment>
+            rowKey="id"
+            size="small"
+            columns={columns}
+            dataSource={data ?? []}
+            pagination={false}
+            locale={{ emptyText: "暂无环境,点击右上角创建第一个" }}
+          />
+        </Card>
       )}
 
       <Drawer

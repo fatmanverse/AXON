@@ -17,7 +17,7 @@
 import { ReloadOutlined, SearchOutlined, SettingOutlined } from "@ant-design/icons";
 import { Button, Checkbox, Dropdown, Input, Space, Tooltip } from "antd";
 
-import { colors } from "@/theme";
+import { colors, spacing } from "@/theme";
 
 export interface ColumnToggle {
   /** 列 key,与 Table columns 的 key 对应 */
@@ -74,12 +74,12 @@ export function TableToolbar({
         justifyContent: "space-between",
         alignItems: "center",
         gap: 12,
-        marginBottom: 12,
+        marginBottom: spacing.toolbarGap,
       }}
     >
       <Space size="middle" wrap>
         {title != null && (
-          <span style={{ fontSize: 14, fontWeight: 600, color: colors.textTitle }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: colors.textTitle }}>
             {title}
           </span>
         )}

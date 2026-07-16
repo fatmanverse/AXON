@@ -18,8 +18,8 @@ body {
     "Microsoft YaHei", "微软雅黑", Roboto, -apple-system, BlinkMacSystemFont,
     sans-serif;
   font-size: 14px;
-  color: #5a5e62;
-  background: #f4f5f7;
+  color: #4b5058;
+  background: #f5f6f8;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -30,11 +30,12 @@ a {
 }
 
 /*
- * 侧栏当前菜单项左侧 3px 经典绿高亮条(INSPINIA 招牌)。菜单项现在有 6px 圆角与
- * 内缩边距,高亮条随之内收并与圆角对齐,不再贴死屏幕左缘。
+ * 侧栏当前菜单项左侧 3px 主色高亮条(theme.ts colors.primary,靛蓝)。菜单项有
+ * 6px 圆角与内缩边距,高亮条随之内收并与圆角对齐,不贴死屏幕左缘。
+ * AntD 深色 Menu 无对应 token,故以 inset box-shadow 实现(不占布局)。
  */
 .ant-menu-dark .ant-menu-item-selected {
-  box-shadow: inset 3px 0 0 0 #1ab394;
+  box-shadow: inset 3px 0 0 0 #4f63e6;
 }
 
 /* 交互过渡:菜单/按钮/表格行的状态切换更顺滑,避免生硬跳变。 */

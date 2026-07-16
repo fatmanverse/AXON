@@ -10,6 +10,7 @@
 import { useState } from "react";
 import {
   Button,
+  Card,
   Drawer,
   Form,
   Input,
@@ -44,7 +45,8 @@ import {
 import { pollTaskUntilDone } from "@/api/taskPolling";
 import { AGENT_STATUS } from "@/constants/status";
 import { Muted } from "@/components/Muted";
-import { colors } from "@/theme";
+import { PageHeader } from "@/components/PageHeader";
+import { colors, shadows } from "@/theme";
 
 interface ServerFormValues {
   name: string;
@@ -260,32 +262,28 @@ export function ServersPage(): React.ReactElement {
 
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 12,
-        }}
-      >
-        <span style={{ fontSize: 14, fontWeight: 600, color: colors.textTitle }}>服务器</span>
-        <Button type="primary" onClick={() => setDrawerOpen(true)}>
-          纳管服务器
-        </Button>
-      </div>
+      <PageHeader
+        title="服务器"
+        extra={
+          <Button type="primary" onClick={() => setDrawerOpen(true)}>
+            纳管服务器
+          </Button>
+        }
+      />
 
       {isLoading ? (
         <Skeleton active paragraph={{ rows: 5 }} />
       ) : (
-        <Table<Server>
-          rowKey="id"
-          size="small"
-          columns={columns}
-          dataSource={data ?? []}
-          pagination={false}
-          locale={{ emptyText: "暂无纳管服务器,点击右上角纳管第一台" }}
-          bordered
-        />
+        <Card styles={{ body: { padding: 0 } }} style={{ boxShadow: shadows.card }}>
+          <Table<Server>
+            rowKey="id"
+            size="small"
+            columns={columns}
+            dataSource={data ?? []}
+            pagination={false}
+            locale={{ emptyText: "暂无纳管服务器,点击右上角纳管第一台" }}
+          />
+        </Card>
       )}
 
       <Drawer

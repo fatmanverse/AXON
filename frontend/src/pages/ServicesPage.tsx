@@ -10,13 +10,13 @@
 import { useState } from "react";
 import {
   Button,
+  Card,
   Descriptions,
   Drawer,
   Form,
   Input,
   Popconfirm,
   Result,
-  Segmented,
   Select,
   Skeleton,
   Space,
@@ -28,6 +28,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/client";
+import { type Environment, listEnvironments } from "@/api/environments";
 import {
   type CreateServiceRequest,
   type LifecycleAction,
@@ -41,14 +42,17 @@ import {
 } from "@/api/services";
 import { pollTaskUntilDone } from "@/api/taskPolling";
 import { TableToolbar, type ColumnToggle } from "@/components/TableToolbar";
-import { colors } from "@/theme";
+import { colors, shadows } from "@/theme";
 import { Muted } from "@/components/Muted";
 
-const ENV_TAG: Record<ServiceEnvironment, string> = {
-  dev: "default",
-  staging: colors.warning,
-  prod: colors.danger,
-};
+// 环境标签配色:环境为任意自定义名,不再按名硬编码。改按环境语义着色——需审批的
+// 高危环境用 danger 强提示,普通环境用 default;环境已被删(悬空引用)时也走 default。
+function envTagColor(env: Environment | undefined): string {
+  if (env?.requires_approval) {
+    return colors.danger;
+  }
+  return "default";
+}
 
 const RUNTIME_OPTIONS: { label: string; value: Runtime }[] = [
   { label: "systemd", value: "systemd" },
@@ -56,12 +60,6 @@ const RUNTIME_OPTIONS: { label: string; value: Runtime }[] = [
   { label: "k8s", value: "k8s" },
   { label: "process", value: "process" },
   { label: "cloud-fn", value: "cloud-fn" },
-];
-
-const ENV_OPTIONS: { label: string; value: ServiceEnvironment }[] = [
-  { label: "dev", value: "dev" },
-  { label: "staging", value: "staging" },
-  { label: "prod", value: "prod" },
 ];
 
 // 各 runtime 的 runtime_ref 目标键:与后端 runtime_registry 对齐。
@@ -110,9 +108,11 @@ function toCreateRequest(values: ServiceFormValues): CreateServiceRequest {
 /** 服务详情抽屉:只读展示列表已有字段(环境/运行时/放置数/期望版本/运行时目标)。 */
 function ServiceDetailDrawer({
   service,
+  envColor,
   onClose,
 }: {
   service: Service | null;
+  envColor: string;
   onClose: () => void;
 }): React.ReactElement {
   return (
@@ -127,7 +127,7 @@ function ServiceDetailDrawer({
         <Descriptions column={1} size="small" bordered>
           <Descriptions.Item label="服务名">{service.name}</Descriptions.Item>
           <Descriptions.Item label="环境">
-            <Tag color={ENV_TAG[service.env]}>{service.env}</Tag>
+            <Tag color={envColor}>{service.env}</Tag>
           </Descriptions.Item>
           <Descriptions.Item label="运行时">
             <Tag>{service.runtime}</Tag>
@@ -172,6 +172,18 @@ export function ServicesPage(): React.ReactElement {
     queryKey: ["services", envFilter, runtimeFilter],
     queryFn: () => listServices(filters),
   });
+
+  // 环境列表:与服务器纳管页同源,供筛选/新建下拉与标签着色。按 name 建索引,
+  // 表格/详情据 service.env 反查环境语义(requires_approval)着色。
+  const { data: environments } = useQuery({
+    queryKey: ["environments"],
+    queryFn: listEnvironments,
+  });
+  const envByName = new Map((environments ?? []).map((e) => [e.name, e]));
+  const envOptions = (environments ?? []).map((e) => ({
+    label: e.display_name ? `${e.display_name} (${e.name})` : e.name,
+    value: e.name,
+  }));
 
   const createMutation = useMutation({
     mutationFn: (body: CreateServiceRequest) => createService(body),
@@ -231,7 +243,9 @@ export function ServicesPage(): React.ReactElement {
       dataIndex: "env",
       key: "env",
       width: 90,
-      render: (env: ServiceEnvironment) => <Tag color={ENV_TAG[env]}>{env}</Tag>,
+      render: (env: ServiceEnvironment) => (
+        <Tag color={envTagColor(envByName.get(env))}>{env}</Tag>
+      ),
     },
     {
       title: "运行时",
@@ -336,8 +350,8 @@ export function ServicesPage(): React.ReactElement {
               placeholder="全部环境"
               value={envFilter}
               onChange={setEnvFilter}
-              options={ENV_OPTIONS}
-              style={{ width: 120 }}
+              options={envOptions}
+              style={{ width: 140 }}
             />
             <Select<Runtime>
               size="small"
@@ -370,15 +384,16 @@ export function ServicesPage(): React.ReactElement {
       {isLoading ? (
         <Skeleton active paragraph={{ rows: 5 }} />
       ) : (
-        <Table<Service>
-          rowKey="id"
-          size="small"
-          columns={visibleTableColumns}
-          dataSource={filteredData}
-          pagination={{ pageSize: 15, hideOnSinglePage: true, showSizeChanger: false }}
-          locale={{ emptyText: "暂无服务,点击右上角新建" }}
-          bordered
-        />
+        <Card styles={{ body: { padding: 0 } }} style={{ boxShadow: shadows.card }}>
+          <Table<Service>
+            rowKey="id"
+            size="small"
+            columns={visibleTableColumns}
+            dataSource={filteredData}
+            pagination={{ pageSize: 15, hideOnSinglePage: true, showSizeChanger: false }}
+            locale={{ emptyText: "暂无服务,点击右上角新建" }}
+          />
+        </Card>
       )}
 
       <Drawer
@@ -393,7 +408,7 @@ export function ServicesPage(): React.ReactElement {
           layout="vertical"
           onFinish={(values) => createMutation.mutate(toCreateRequest(values))}
           requiredMark={false}
-          initialValues={{ env: "dev", runtime: "systemd" }}
+          initialValues={{ runtime: "systemd" }}
         >
           <Form.Item
             name="name"
@@ -402,8 +417,17 @@ export function ServicesPage(): React.ReactElement {
           >
             <Input placeholder="如 billing" />
           </Form.Item>
-          <Form.Item name="env" label="环境">
-            <Segmented options={ENV_OPTIONS} />
+          <Form.Item
+            name="env"
+            label="环境"
+            rules={[{ required: true, message: "请选择归属环境" }]}
+            extra="从环境管理中已创建的环境里选择;若无可选,请先到环境管理创建。"
+          >
+            <Select
+              placeholder="选择环境"
+              options={envOptions}
+              notFoundContent="暂无环境,请先在环境管理创建"
+            />
           </Form.Item>
           <Form.Item name="runtime" label="运行时">
             <Select options={RUNTIME_OPTIONS} />
@@ -442,6 +466,7 @@ export function ServicesPage(): React.ReactElement {
 
       <ServiceDetailDrawer
         service={detailService}
+        envColor={envTagColor(detailService ? envByName.get(detailService.env) : undefined)}
         onClose={() => setDetailService(null)}
       />
     </div>
