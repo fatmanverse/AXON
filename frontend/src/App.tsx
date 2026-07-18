@@ -14,6 +14,7 @@ import { ServersPage } from "@/pages/ServersPage";
 import { ServicesPage } from "@/pages/ServicesPage";
 import { EnvironmentsPage } from "@/pages/EnvironmentsPage";
 import { DeploymentsPage } from "@/pages/DeploymentsPage";
+import { BuildsPage } from "@/pages/BuildsPage";
 import { ConfigsPage } from "@/pages/ConfigsPage";
 import { AlertsPage } from "@/pages/AlertsPage";
 import { ApprovalsPage } from "@/pages/ApprovalsPage";
@@ -29,6 +30,7 @@ export function App(): React.ReactElement {
           <Route path="/services" element={<ServicesPage />} />
           <Route path="/environments" element={<EnvironmentsPage />} />
           <Route path="/deployments" element={<DeploymentsPage />} />
+          <Route path="/builds" element={<BuildsPage />} />
           <Route path="/configs" element={<ConfigsPage />} />
           <Route path="/monitoring" element={<MonitoringPage />} />
           <Route path="/approvals" element={<ApprovalsPage />} />

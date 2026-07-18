@@ -10,13 +10,11 @@ import { useState } from "react";
 import {
   Button,
   Card,
-  Drawer,
   Form,
   Input,
   Popconfirm,
   Result,
   Skeleton,
-  Space,
   Switch,
   Table,
   Tag,
@@ -33,6 +31,7 @@ import {
   deleteEnvironment,
   listEnvironments,
 } from "@/api/environments";
+import { FormModal } from "@/components/FormModal";
 import { PageHeader } from "@/components/PageHeader";
 import { colors, shadows } from "@/theme";
 
@@ -45,7 +44,7 @@ interface EnvFormValues {
 
 export function EnvironmentsPage(): React.ReactElement {
   const queryClient = useQueryClient();
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm<EnvFormValues>();
 
   const { data, isLoading, error } = useQuery({
@@ -57,7 +56,7 @@ export function EnvironmentsPage(): React.ReactElement {
     mutationFn: (body: CreateEnvironmentRequest) => createEnvironment(body),
     onSuccess: (env) => {
       message.success(`已创建环境 ${env.name}`);
-      setDrawerOpen(false);
+      setModalOpen(false);
       form.resetFields();
       void queryClient.invalidateQueries({ queryKey: ["environments"] });
     },
@@ -142,7 +141,7 @@ export function EnvironmentsPage(): React.ReactElement {
       <PageHeader
         title="环境"
         extra={
-          <Button type="primary" onClick={() => setDrawerOpen(true)}>
+          <Button type="primary" onClick={() => setModalOpen(true)}>
             创建环境
           </Button>
         }
@@ -163,58 +162,45 @@ export function EnvironmentsPage(): React.ReactElement {
         </Card>
       )}
 
-      <Drawer
+      <FormModal<EnvFormValues>
         title="创建环境"
-        width={420}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        destroyOnClose
+        open={modalOpen}
+        form={form}
+        onFinish={handleSubmit}
+        onClose={() => setModalOpen(false)}
+        confirmLoading={createMutation.isPending}
+        okText="创建"
       >
-        <Form<EnvFormValues>
-          form={form}
-          layout="vertical"
-          onFinish={handleSubmit}
-          requiredMark={false}
+        <Form.Item
+          name="name"
+          label="环境标识"
+          rules={[
+            { required: true, message: "请输入环境标识" },
+            {
+              pattern: /^[a-z0-9][a-z0-9-]*$/,
+              message: "小写字母/数字/连字符,以字母或数字开头",
+            },
+          ]}
+          extra="稳定唯一标识,创建后作为服务与服务器的归属键,如 dev / staging / prod / gray。"
         >
-          <Form.Item
-            name="name"
-            label="环境标识"
-            rules={[
-              { required: true, message: "请输入环境标识" },
-              {
-                pattern: /^[a-z0-9][a-z0-9-]*$/,
-                message: "小写字母/数字/连字符,以字母或数字开头",
-              },
-            ]}
-            extra="稳定唯一标识,创建后作为服务与服务器的归属键,如 dev / staging / prod / gray。"
-          >
-            <Input placeholder="如 gray" />
-          </Form.Item>
-          <Form.Item name="display_name" label="显示名">
-            <Input placeholder="如 灰度环境" />
-          </Form.Item>
-          <Form.Item
-            name="requires_approval"
-            label="高危操作需审批"
-            valuePropName="checked"
-            initialValue={false}
-            extra="开启后,该环境的部署/删除/回滚先落审批,由授权人批准后执行(§10.2)。"
-          >
-            <Switch />
-          </Form.Item>
-          <Form.Item name="description" label="描述">
-            <Input.TextArea rows={3} placeholder="用途说明(可选)" />
-          </Form.Item>
-          <Form.Item style={{ marginTop: 8, marginBottom: 0 }}>
-            <Space>
-              <Button type="primary" htmlType="submit" loading={createMutation.isPending}>
-                创建
-              </Button>
-              <Button onClick={() => setDrawerOpen(false)}>取消</Button>
-            </Space>
-          </Form.Item>
-        </Form>
-      </Drawer>
+          <Input placeholder="如 gray" />
+        </Form.Item>
+        <Form.Item name="display_name" label="显示名">
+          <Input placeholder="如 灰度环境" />
+        </Form.Item>
+        <Form.Item
+          name="requires_approval"
+          label="高危操作需审批"
+          valuePropName="checked"
+          initialValue={false}
+          extra="开启后,该环境的部署/删除/回滚先落审批,由授权人批准后执行(§10.2)。"
+        >
+          <Switch />
+        </Form.Item>
+        <Form.Item name="description" label="描述">
+          <Input.TextArea rows={3} placeholder="用途说明(可选)" />
+        </Form.Item>
+      </FormModal>
     </div>
   );
 }

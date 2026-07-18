@@ -11,10 +11,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings
 from app.core.errors import AppError
 
 router = APIRouter(prefix="/api/dist", tags=["dist"])
@@ -24,9 +24,11 @@ router = APIRouter(prefix="/api/dist", tags=["dist"])
 async def download_binary(
     filename: str,
     request: Request,
-    settings: Settings = Depends(get_settings),
 ) -> FileResponse:
     """从控制面预置目录返回二进制文件。免鉴权只读;严防路径穿越。"""
+    # 读运行期注入的 settings(app.state,与 webhooks 同规矩),而非模块级
+    # 缓存的 get_settings()——后者忽略 create_app(settings) 注入的 dist_dir。
+    settings: Settings = request.app.state.settings
     # 只接受单层安全文件名:含分隔符 / 空段 / .. 的一律拒绝,杜绝 ../ 逃逸。
     if filename in ("", ".", "..") or "/" in filename or "\\" in filename or ".." in filename:
         raise AppError("invalid_filename", "非法文件名", status_code=404)

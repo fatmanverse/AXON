@@ -11,6 +11,7 @@ from app.api import (
     alerts,
     approvals,
     auth,
+    builds,
     deployments,
     environments,
     health,
@@ -148,6 +149,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(environments.router)
     app.include_router(servers.router)
     app.include_router(services.router)
+    app.include_router(builds.router)
     app.include_router(deployments.router)
     app.include_router(tasks.router)
     app.include_router(metrics.router)

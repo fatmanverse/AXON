@@ -12,7 +12,6 @@ import {
   Button,
   Card,
   Descriptions,
-  Drawer,
   Form,
   Input,
   Popconfirm,
@@ -41,6 +40,8 @@ import {
   runLifecycle,
 } from "@/api/services";
 import { pollTaskUntilDone } from "@/api/taskPolling";
+import { DetailModal } from "@/components/DetailModal";
+import { FormModal } from "@/components/FormModal";
 import { TableToolbar, type ColumnToggle } from "@/components/TableToolbar";
 import { colors, shadows } from "@/theme";
 import { Muted } from "@/components/Muted";
@@ -105,8 +106,8 @@ function toCreateRequest(values: ServiceFormValues): CreateServiceRequest {
   };
 }
 
-/** 服务详情抽屉:只读展示列表已有字段(环境/运行时/放置数/期望版本/运行时目标)。 */
-function ServiceDetailDrawer({
+/** 服务详情弹窗:只读展示列表已有字段(环境/运行时/放置数/期望版本/运行时目标)。 */
+function ServiceDetailModal({
   service,
   envColor,
   onClose,
@@ -116,12 +117,10 @@ function ServiceDetailDrawer({
   onClose: () => void;
 }): React.ReactElement {
   return (
-    <Drawer
+    <DetailModal
       title={service ? `服务详情 · ${service.name}` : "服务详情"}
-      width={480}
       open={service != null}
       onClose={onClose}
-      destroyOnClose
     >
       {service && (
         <Descriptions column={1} size="small" bordered>
@@ -152,7 +151,7 @@ function ServiceDetailDrawer({
           </Descriptions.Item>
         </Descriptions>
       )}
-    </Drawer>
+    </DetailModal>
   );
 }
 
@@ -160,7 +159,7 @@ export function ServicesPage(): React.ReactElement {
   const queryClient = useQueryClient();
   const [envFilter, setEnvFilter] = useState<ServiceEnvironment | undefined>();
   const [runtimeFilter, setRuntimeFilter] = useState<Runtime | undefined>();
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE);
@@ -189,7 +188,7 @@ export function ServicesPage(): React.ReactElement {
     mutationFn: (body: CreateServiceRequest) => createService(body),
     onSuccess: (service) => {
       message.success(`已创建服务 ${service.name}`);
-      setDrawerOpen(false);
+      setModalOpen(false);
       form.resetFields();
       void queryClient.invalidateQueries({ queryKey: ["services"] });
     },
@@ -375,7 +374,7 @@ export function ServicesPage(): React.ReactElement {
           onChange: setVisibleColumns,
         }}
         actions={
-          <Button type="primary" size="small" onClick={() => setDrawerOpen(true)}>
+          <Button type="primary" size="small" onClick={() => setModalOpen(true)}>
             新建服务
           </Button>
         }
@@ -396,75 +395,62 @@ export function ServicesPage(): React.ReactElement {
         </Card>
       )}
 
-      <Drawer
+      <FormModal<ServiceFormValues>
         title="新建服务"
-        width={420}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        destroyOnClose
+        open={modalOpen}
+        form={form}
+        onFinish={(values) => createMutation.mutate(toCreateRequest(values))}
+        onClose={() => setModalOpen(false)}
+        confirmLoading={createMutation.isPending}
+        okText="创建"
+        initialValues={{ runtime: "systemd" }}
       >
-        <Form<ServiceFormValues>
-          form={form}
-          layout="vertical"
-          onFinish={(values) => createMutation.mutate(toCreateRequest(values))}
-          requiredMark={false}
-          initialValues={{ runtime: "systemd" }}
+        <Form.Item
+          name="name"
+          label="服务名"
+          rules={[{ required: true, message: "请输入服务名" }]}
         >
-          <Form.Item
-            name="name"
-            label="服务名"
-            rules={[{ required: true, message: "请输入服务名" }]}
-          >
-            <Input placeholder="如 billing" />
-          </Form.Item>
-          <Form.Item
-            name="env"
-            label="环境"
-            rules={[{ required: true, message: "请选择归属环境" }]}
-            extra="从环境管理中已创建的环境里选择;若无可选,请先到环境管理创建。"
-          >
-            <Select
-              placeholder="选择环境"
-              options={envOptions}
-              notFoundContent="暂无环境,请先在环境管理创建"
-            />
-          </Form.Item>
-          <Form.Item name="runtime" label="运行时">
-            <Select options={RUNTIME_OPTIONS} />
-          </Form.Item>
-          <Form.Item
-            noStyle
-            shouldUpdate={(prev, cur) => prev.runtime !== cur.runtime}
-          >
-            {({ getFieldValue }) => {
-              const rt = (getFieldValue("runtime") as Runtime) ?? "systemd";
-              return (
-                <Form.Item
-                  name="target"
-                  label={`目标标识(${RUNTIME_REF_KEY[rt]})`}
-                  rules={[{ required: true, message: "请输入运行时目标标识" }]}
-                  extra="如 systemd 填 unit 名、docker 填容器名、k8s 填 workload。"
-                >
-                  <Input placeholder="如 billing.service" />
-                </Form.Item>
-              );
-            }}
-          </Form.Item>
-          <Form.Item name="desired_version" label="期望版本(可选)">
-            <Input placeholder="如 v1.2.0" />
-          </Form.Item>
-          <Form.Item style={{ marginTop: 8, marginBottom: 0 }}>
-            <Space>
-              <Button type="primary" htmlType="submit" loading={createMutation.isPending}>
-                创建
-              </Button>
-              <Button onClick={() => setDrawerOpen(false)}>取消</Button>
-            </Space>
-          </Form.Item>
-        </Form>
-      </Drawer>
+          <Input placeholder="如 billing" />
+        </Form.Item>
+        <Form.Item
+          name="env"
+          label="环境"
+          rules={[{ required: true, message: "请选择归属环境" }]}
+          extra="从环境管理中已创建的环境里选择;若无可选,请先到环境管理创建。"
+        >
+          <Select
+            placeholder="选择环境"
+            options={envOptions}
+            notFoundContent="暂无环境,请先在环境管理创建"
+          />
+        </Form.Item>
+        <Form.Item name="runtime" label="运行时">
+          <Select options={RUNTIME_OPTIONS} />
+        </Form.Item>
+        <Form.Item
+          noStyle
+          shouldUpdate={(prev, cur) => prev.runtime !== cur.runtime}
+        >
+          {({ getFieldValue }) => {
+            const rt = (getFieldValue("runtime") as Runtime) ?? "systemd";
+            return (
+              <Form.Item
+                name="target"
+                label={`目标标识(${RUNTIME_REF_KEY[rt]})`}
+                rules={[{ required: true, message: "请输入运行时目标标识" }]}
+                extra="如 systemd 填 unit 名、docker 填容器名、k8s 填 workload。"
+              >
+                <Input placeholder="如 billing.service" />
+              </Form.Item>
+            );
+          }}
+        </Form.Item>
+        <Form.Item name="desired_version" label="期望版本(可选)">
+          <Input placeholder="如 v1.2.0" />
+        </Form.Item>
+      </FormModal>
 
-      <ServiceDetailDrawer
+      <ServiceDetailModal
         service={detailService}
         envColor={envTagColor(detailService ? envByName.get(detailService.env) : undefined)}
         onClose={() => setDetailService(null)}

@@ -11,7 +11,6 @@ import { useState } from "react";
 import {
   Button,
   Card,
-  Drawer,
   Form,
   Input,
   InputNumber,
@@ -44,6 +43,7 @@ import {
 } from "@/api/servers";
 import { pollTaskUntilDone } from "@/api/taskPolling";
 import { AGENT_STATUS } from "@/constants/status";
+import { FormModal } from "@/components/FormModal";
 import { Muted } from "@/components/Muted";
 import { PageHeader } from "@/components/PageHeader";
 import { colors, shadows } from "@/theme";
@@ -89,7 +89,7 @@ function toRequest(
 
 export function ServersPage(): React.ReactElement {
   const queryClient = useQueryClient();
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const [mode, setMode] = useState<AccessMode>("ssh");
   const [authType, setAuthType] = useState<SshAuthType>("key");
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -110,7 +110,7 @@ export function ServersPage(): React.ReactElement {
     mutationFn: (body: RegisterServerRequest) => registerServer(body),
     onSuccess: (server) => {
       message.success(`已纳管服务器 ${server.name}`);
-      setDrawerOpen(false);
+      setModalOpen(false);
       form.resetFields();
       void queryClient.invalidateQueries({ queryKey: ["servers"] });
     },
@@ -265,7 +265,7 @@ export function ServersPage(): React.ReactElement {
       <PageHeader
         title="服务器"
         extra={
-          <Button type="primary" onClick={() => setDrawerOpen(true)}>
+          <Button type="primary" onClick={() => setModalOpen(true)}>
             纳管服务器
           </Button>
         }
@@ -286,115 +286,101 @@ export function ServersPage(): React.ReactElement {
         </Card>
       )}
 
-      <Drawer
+      <FormModal<ServerFormValues>
         title="纳管服务器"
-        width={420}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        destroyOnClose
+        open={modalOpen}
+        form={form}
+        onFinish={handleSubmit}
+        onClose={() => setModalOpen(false)}
+        confirmLoading={registerMutation.isPending}
+        okText="纳管"
       >
-        <Form<ServerFormValues>
-          form={form}
-          layout="vertical"
-          onFinish={handleSubmit}
-          requiredMark={false}
+        <Form.Item label="接入模式">
+          <Segmented
+            value={mode}
+            onChange={(v) => setMode(v as AccessMode)}
+            options={[
+              { label: "SSH", value: "ssh" },
+              { label: "Agent", value: "agent" },
+            ]}
+          />
+        </Form.Item>
+        <Form.Item
+          name="name"
+          label="名称"
+          rules={[{ required: true, message: "请输入服务器名称" }]}
         >
-          <Form.Item label="接入模式">
-            <Segmented
-              value={mode}
-              onChange={(v) => setMode(v as AccessMode)}
-              options={[
-                { label: "SSH", value: "ssh" },
-                { label: "Agent", value: "agent" },
-              ]}
-            />
-          </Form.Item>
-          <Form.Item
-            name="name"
-            label="名称"
-            rules={[{ required: true, message: "请输入服务器名称" }]}
-          >
-            <Input placeholder="如 web-01" />
-          </Form.Item>
-          <Form.Item
-            name="host"
-            label="主机地址"
-            rules={[{ required: true, message: "请输入主机 IP 或域名" }]}
-          >
-            <Input placeholder="如 10.0.0.10" />
-          </Form.Item>
-          <Form.Item
-            name="environment"
-            label="归属环境"
-            rules={[{ required: true, message: "请选择归属环境" }]}
-            extra="从环境管理中已创建的环境里选择;若无可选,请先到环境管理创建。"
-          >
-            <Select
-              placeholder="选择环境"
-              options={envOptions}
-              notFoundContent="暂无环境,请先在环境管理创建"
-            />
-          </Form.Item>
+          <Input placeholder="如 web-01" />
+        </Form.Item>
+        <Form.Item
+          name="host"
+          label="主机地址"
+          rules={[{ required: true, message: "请输入主机 IP 或域名" }]}
+        >
+          <Input placeholder="如 10.0.0.10" />
+        </Form.Item>
+        <Form.Item
+          name="environment"
+          label="归属环境"
+          rules={[{ required: true, message: "请选择归属环境" }]}
+          extra="从环境管理中已创建的环境里选择;若无可选,请先到环境管理创建。"
+        >
+          <Select
+            placeholder="选择环境"
+            options={envOptions}
+            notFoundContent="暂无环境,请先在环境管理创建"
+          />
+        </Form.Item>
 
-          {mode === "ssh" ? (
-            <>
-              <Form.Item label="认证方式">
-                <Segmented
-                  value={authType}
-                  onChange={(v) => setAuthType(v as SshAuthType)}
-                  options={[
-                    { label: "私钥", value: "key" },
-                    { label: "密码", value: "password" },
-                  ]}
-                />
-              </Form.Item>
-              <Form.Item name="username" label="SSH 用户名">
-                <Input placeholder="默认 root" />
-              </Form.Item>
-              <Form.Item name="ssh_port" label="SSH 端口" initialValue={22}>
-                <InputNumber min={1} max={65535} style={{ width: "100%" }} />
-              </Form.Item>
-              {authType === "key" ? (
-                <Form.Item
-                  name="ssh_private_key"
-                  label="SSH 私钥"
-                  rules={[{ required: true, message: "请粘贴 SSH 私钥" }]}
-                  extra="私钥仅用于建连,存入凭证保险箱,不落业务库、不回显。"
-                >
-                  <Input.TextArea rows={5} placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" />
-                </Form.Item>
-              ) : (
-                <Form.Item
-                  name="ssh_password"
-                  label="SSH 密码"
-                  rules={[{ required: true, message: "请输入 SSH 密码" }]}
-                  extra="密码存入凭证保险箱,不落业务库、不回显。"
-                >
-                  <Input.Password placeholder="SSH 登录密码" />
-                </Form.Item>
-              )}
-            </>
-          ) : (
-            <Form.Item
-              name="agent_id"
-              label="Agent ID"
-              rules={[{ required: true, message: "请输入 Agent ID" }]}
-              extra="Agent 模式下由 Agent 主动上报心跳,无需 SSH 凭证。"
-            >
-              <Input placeholder="Agent 注册时分配的 ID" />
+        {mode === "ssh" ? (
+          <>
+            <Form.Item label="认证方式">
+              <Segmented
+                value={authType}
+                onChange={(v) => setAuthType(v as SshAuthType)}
+                options={[
+                  { label: "私钥", value: "key" },
+                  { label: "密码", value: "password" },
+                ]}
+              />
             </Form.Item>
-          )}
-
-          <Form.Item style={{ marginTop: 8, marginBottom: 0 }}>
-            <Space>
-              <Button type="primary" htmlType="submit" loading={registerMutation.isPending}>
-                纳管
-              </Button>
-              <Button onClick={() => setDrawerOpen(false)}>取消</Button>
-            </Space>
+            <Form.Item name="username" label="SSH 用户名">
+              <Input placeholder="默认 root" />
+            </Form.Item>
+            <Form.Item name="ssh_port" label="SSH 端口" initialValue={22}>
+              <InputNumber min={1} max={65535} style={{ width: "100%" }} />
+            </Form.Item>
+            {authType === "key" ? (
+              <Form.Item
+                name="ssh_private_key"
+                label="SSH 私钥"
+                rules={[{ required: true, message: "请粘贴 SSH 私钥" }]}
+                extra="私钥仅用于建连,存入凭证保险箱,不落业务库、不回显。"
+              >
+                <Input.TextArea rows={5} placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" />
+              </Form.Item>
+            ) : (
+              <Form.Item
+                name="ssh_password"
+                label="SSH 密码"
+                rules={[{ required: true, message: "请输入 SSH 密码" }]}
+                extra="密码存入凭证保险箱,不落业务库、不回显。"
+              >
+                <Input.Password placeholder="SSH 登录密码" />
+              </Form.Item>
+            )}
+          </>
+        ) : (
+          <Form.Item
+            name="agent_id"
+            label="Agent ID"
+            rules={[{ required: true, message: "请输入 Agent ID" }]}
+            extra="Agent 模式下由 Agent 主动上报心跳,无需 SSH 凭证。"
+          >
+            <Input placeholder="Agent 注册时分配的 ID" />
           </Form.Item>
-        </Form>
-      </Drawer>
+        )}
+      </FormModal>
     </div>
   );
 }

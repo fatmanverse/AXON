@@ -146,6 +146,14 @@ class Settings(BaseSettings):
     agent_install_dir: str = "/usr/local/bin"
     agent_service_name: str = "axon-agent"
 
+    # 本地构建(构建能力一期,方案 A)。build_workspace_dir 是控制面主机上每次构建
+    # 的 git clone 工作区根目录(用完清理);build_artifacts_dir 是 generic 形态 tar
+    # 制品的落点;build_step_timeout_sec 限制单个构建步骤(clone/测试/build)的最长
+    # 执行时间,防跑飞构建长期占用节点。
+    build_workspace_dir: str = "/var/lib/axon/builds"
+    build_artifacts_dir: str = "/var/lib/axon/artifacts"
+    build_step_timeout_sec: float = 1800.0
+
     @property
     def broker_url(self) -> str:
         return self.celery_broker_url or self.redis_url

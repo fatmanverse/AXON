@@ -19,6 +19,11 @@ class ServiceCreate(BaseModel):
     desired_version: str | None = Field(default=None, max_length=128)
     reload_mode: ReloadMode = ReloadMode.RESTART
     health_check: dict[str, Any] | None = None
+    # 构建默认配置(照 health_check 先例的可空 JSON):承载 repo_url / git_ref /
+    # test_command / build_command / artifact_type(generic|docker)及形态专属字段
+    # (generic 的 output_path、docker 的 image_name/dockerfile/registry_id)。
+    # 触发构建时以此为默认,可被 BuildRequestBody 覆写。
+    build_config: dict[str, Any] | None = None
 
 
 class PlacementCreate(BaseModel):

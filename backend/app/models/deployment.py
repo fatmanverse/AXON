@@ -88,7 +88,8 @@ class Deployment(Base, TimestampMixin):
     # id 即 deployment_id 关联键(§14.3)
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     service_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
-    env: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    # 长度与 environments.name / services.env 对齐(64),避免自定义长环境名截断。
+    env: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     # git_sha 是贯穿扫描/部署的关联键;version 是人类可读的 tag。
     git_sha: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     version: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -114,5 +115,8 @@ class Deployment(Base, TimestampMixin):
     # 上一次成功部署(支持一键回滚);scan_result_id 由 Epic 3 按 git_sha 回填。
     previous_deployment_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     scan_result_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # 新链路:控制面自建构建产出的制品(软引用 artifacts.id)。旧链路继续填 artifact
+    # 字符串地址,新链路填 artifact_id,两者并存、零破坏(见迁移说明)。
+    artifact_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

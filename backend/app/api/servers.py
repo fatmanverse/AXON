@@ -37,6 +37,7 @@ from app.schemas.task import TaskAccepted
 from app.services.audit_service import AuditService
 from app.services.agent_delivery_service import AgentDeliveryService
 from app.services.environment_repository import EnvironmentRepository
+from app.services.executor_factory import build_executor_for_server
 from app.services.monitoring_bootstrap import MonitoringBootstrapService
 from app.services.prometheus_targets import PrometheusTargetRegistry
 from app.services.server_repository import ServerRepository
@@ -211,7 +212,6 @@ async def install_agent(
     secrets: SecretStore = Depends(get_secret_store),
     db: Database = Depends(get_database),
     connector=Depends(get_ssh_connector),
-    settings: Settings = Depends(get_settings),
     user: User = Depends(require_permission(parse_permission("server:*:write"))),
 ) -> dict:
     """对 SSH 纳管的服务器经 SSH 下发安装 axon-agent(需求4)。
@@ -249,13 +249,10 @@ async def install_agent(
     delivery = AgentDeliveryService(
         db,
         secrets,
+        request.app.state.settings,
         connector=connector,
-        control_plane_base_url=settings.control_plane_base_url,
-        agent_version=settings.agent_version,
-        agent_install_dir=settings.agent_install_dir,
-        agent_service_name=settings.agent_service_name,
     )
-    background.add_task(delivery.install, task_id=task_id, server_id=server_id)
+    background.add_task(delivery.run_install, task_id=task_id, server_id=server_id)
 
     accepted = TaskAccepted(task_id=task_id, status=task.status)
     return ok(accepted.model_dump())

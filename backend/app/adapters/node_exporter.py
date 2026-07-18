@@ -26,14 +26,28 @@ DEFAULT_PORT = 9100
 _ARCH = "linux-amd64"
 
 
-def _bootstrap_script(version: str, port: int) -> str:
+def _bootstrap_script(version: str, port: int, base_url: str | None = None) -> str:
     """生成幂等安装脚本。version 已在调用处转义,这里直接内插。
 
     脚本语义:已装则仅确保 systemd 拉起;未装则下载解压、装 systemd 单元、
     enable --now。所有步骤在一个 `set -e` 的 sh 里执行,任一步失败即整体非 0。
+
+    base_url 为空走 github 公网;有值则从控制面下载端点拉(离线分发,需求4)。
     """
     quoted_version = shlex.quote(version)
     listen = f":{port}"
+    if base_url:
+        # 离线分发:控制面下载端点直接托管 <DIR>.tar.gz(dist_dir 下预置的文件名)。
+        q_base = shlex.quote(base_url.rstrip("/"))
+        download = (
+            f"  BASE={q_base}; "
+            f'  curl -fsSL -o node_exporter.tar.gz "${{BASE}}/${{DIR}}.tar.gz"; '
+        )
+    else:
+        download = (
+            f"  BASE=https://github.com/prometheus/node_exporter/releases/download; "
+            f'  curl -fsSL -o node_exporter.tar.gz "${{BASE}}/v${{VER}}/${{DIR}}.tar.gz"; '
+        )
     return (
         "set -e; "
         "if command -v node_exporter >/dev/null 2>&1; then "
@@ -41,9 +55,8 @@ def _bootstrap_script(version: str, port: int) -> str:
         "else "
         f"  VER={quoted_version}; "
         f"  DIR=node_exporter-${{VER}}.{_ARCH}; "
-        f"  BASE=https://github.com/prometheus/node_exporter/releases/download; "
         f"  cd /tmp; "
-        f'  curl -fsSL -o node_exporter.tar.gz "${{BASE}}/v${{VER}}/${{DIR}}.tar.gz"; '
+        f"{download}"
         f"  tar xzf node_exporter.tar.gz; "
         f"  install -m 0755 ${{DIR}}/node_exporter /usr/local/bin/node_exporter; "
         "  printf '%s\\n' "
@@ -66,10 +79,17 @@ class NodeExporterInstaller:
         self._executor = executor
 
     async def ensure_installed(
-        self, *, version: str = DEFAULT_VERSION, port: int = DEFAULT_PORT
+        self,
+        *,
+        version: str = DEFAULT_VERSION,
+        port: int = DEFAULT_PORT,
+        base_url: str | None = None,
     ) -> None:
-        """确保目标机装好并运行 node_exporter。失败抛 AppError。"""
-        script = _bootstrap_script(version, port)
+        """确保目标机装好并运行 node_exporter。失败抛 AppError。
+
+        base_url 为空走 github 公网;有值则从控制面下载端点拉(离线分发,需求4)。
+        """
+        script = _bootstrap_script(version, port, base_url)
         result = await self._executor.exec(script)
         if not result.succeeded:
             log.warning(

@@ -18,9 +18,11 @@ from app.core.db import Database
 from app.main import create_app
 from app.models.base import Base
 from app.models.service import Runtime, ServiceEnvironment
+from app.schemas.environment import EnvironmentCreate
 from app.schemas.service import ServiceCreate
 from app.services import notifier as notifier_module
 from app.services.auth_service import AuthService
+from app.services.environment_repository import EnvironmentRepository
 from app.services.service_repository import ServiceRepository
 
 _WEBHOOK_URL = "https://im.example/hook"
@@ -83,6 +85,13 @@ async def app_client(monkeypatch):
                 await AuthService(session, settings).create_user(
                     "operator", "op-pw", roles=["operator"]
                 )
+                # 通知由环境的 requires_approval 语义驱动(§10.2):prod 声明需审批→关键
+                # 操作通知;dev 不需审批→高频常规操作不打扰值班。故 seed 两环境。
+                env_repo = EnvironmentRepository(session)
+                await env_repo.create(
+                    EnvironmentCreate(name="prod", requires_approval=True)
+                )
+                await env_repo.create(EnvironmentCreate(name="dev"))
             yield client, app
 
 

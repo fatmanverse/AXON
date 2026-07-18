@@ -6,8 +6,11 @@
 
 from app.models.alert import Alert
 from app.models.approval import Approval
+from app.models.artifact import Artifact, ArtifactRegistry
 from app.models.audit import AuditLog
 from app.models.base import Base
+from app.models.build import Build
+from app.models.build_node import BuildNode
 from app.models.config_delivery import ConfigDelivery
 from app.models.deployment import Deployment
 from app.models.environment import Environment
@@ -36,4 +39,8 @@ __all__ = [
     "ConfigDelivery",
     "Approval",
     "Environment",
+    "BuildNode",
+    "Build",
+    "ArtifactRegistry",
+    "Artifact",
 ]

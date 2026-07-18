@@ -25,6 +25,8 @@ class TaskType(StrEnum):
     DELETE = "delete"
     RESTART = "restart"
     UPDATE_CONFIG = "update_config"
+    AGENT_INSTALL = "agent_install"
+    BUILD = "build"
 
 
 class TaskStatus(StrEnum):

@@ -36,6 +36,154 @@
         "title": "ApprovalDecision",
         "type": "object"
       },
+      "ArtifactRegistryCreate": {
+        "description": "建制品库入参。docker 库配 url;credential 收明文由 API 换 vault id(不落明文)。",
+        "properties": {
+          "credential": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 512,
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ArtifactRegistryType"
+          },
+          "url": {
+            "default": "",
+            "maxLength": 512,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "ArtifactRegistryCreate",
+        "type": "object"
+      },
+      "ArtifactRegistryType": {
+        "description": "制品库类型:docker 镜像仓 / 通用文件仓(tar 包等)。按需再扩 pypi/npm。",
+        "enum": [
+          "docker",
+          "generic"
+        ],
+        "title": "ArtifactRegistryType",
+        "type": "string"
+      },
+      "BuildNodeCreate": {
+        "description": "注册构建节点入参(架构预留:一期只跑本地节点,此为后续注册用)。",
+        "properties": {
+          "host": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
+          },
+          "labels": {
+            "additionalProperties": true,
+            "title": "Labels",
+            "type": "object"
+          },
+          "max_concurrent": {
+            "default": 1,
+            "maximum": 64.0,
+            "minimum": 1.0,
+            "title": "Max Concurrent",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "server_id": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Id"
+          },
+          "ssh_credential_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ssh Credential Id"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "BuildNodeCreate",
+        "type": "object"
+      },
+      "BuildRequestBody": {
+        "description": "UI 触发构建入参:可覆盖服务 build_config 的默认 ref/version;缺省则用配置默认。",
+        "properties": {
+          "git_ref": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Ref"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "title": "BuildRequestBody",
+        "type": "object"
+      },
       "ConfigFormat": {
         "enum": [
           "env",
@@ -129,6 +277,39 @@
         "title": "DeploymentStrategy",
         "type": "string"
       },
+      "EnvironmentCreate": {
+        "description": "创建环境入参。name 为稳定标识(唯一);requires_approval 决定该环境是否走审批流。",
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 512,
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "requires_approval": {
+            "default": false,
+            "title": "Requires Approval",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "EnvironmentCreate",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -217,6 +398,17 @@
             ],
             "title": "Agent Id"
           },
+          "auth_type": {
+            "default": "key",
+            "title": "Auth Type",
+            "type": "string"
+          },
+          "environment": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Environment",
+            "type": "string"
+          },
           "host": {
             "maxLength": 255,
             "minLength": 1,
@@ -233,6 +425,17 @@
             "minLength": 1,
             "title": "Name",
             "type": "string"
+          },
+          "ssh_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ssh Password"
           },
           "ssh_port": {
             "default": 22,
@@ -268,13 +471,26 @@
         "required": [
           "name",
           "host",
-          "access_mode"
+          "access_mode",
+          "environment"
         ],
         "title": "ServerRegisterRequest",
         "type": "object"
       },
       "ServiceCreate": {
         "properties": {
+          "build_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Build Config"
+          },
           "desired_version": {
             "anyOf": [
               {
@@ -288,7 +504,10 @@
             "title": "Desired Version"
           },
           "env": {
-            "$ref": "#/components/schemas/ServiceEnvironment"
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Env",
+            "type": "string"
           },
           "health_check": {
             "anyOf": [
@@ -330,15 +549,6 @@
         ],
         "title": "ServiceCreate",
         "type": "object"
-      },
-      "ServiceEnvironment": {
-        "enum": [
-          "dev",
-          "staging",
-          "prod"
-        ],
-        "title": "ServiceEnvironment",
-        "type": "string"
       },
       "ValidationError": {
         "properties": {
@@ -543,7 +753,7 @@
     },
     "/api/approvals/{approval_id}/approve": {
       "post": {
-        "description": "批准一条待审批的高危操作,建 task 执行原动作(当前支持 deploy)。\n\n批准者需 approval:{env}:approve 权限,且不能是发起人本人(§13 四眼原则)。",
+        "description": "批准一条待审批的高危操作(deploy / rollback / delete),建 task 执行原动作。\n\n批准者需 approval:{env}:approve 权限,且不能是发起人本人(§13 四眼原则)。批准后\n走与直接执行完全一致的编排路径:deploy/rollback 经 DeploymentService,delete 经\nLifecycleService,保证「批准执行」与「直接执行」无差异。",
         "operationId": "approve_api_approvals__approval_id__approve_post",
         "parameters": [
           {
@@ -651,6 +861,129 @@
         ]
       }
     },
+    "/api/artifact-registries": {
+      "get": {
+        "operationId": "list_artifact_registries_api_artifact_registries_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Artifact Registries Api Artifact Registries Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Artifact Registries",
+        "tags": [
+          "builds"
+        ]
+      },
+      "post": {
+        "operationId": "create_artifact_registry_api_artifact_registries_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactRegistryCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Artifact Registry Api Artifact Registries Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Artifact Registry",
+        "tags": [
+          "builds"
+        ]
+      }
+    },
+    "/api/artifact-registries/{registry_id}": {
+      "delete": {
+        "operationId": "delete_artifact_registry_api_artifact_registries__registry_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "registry_id",
+            "required": true,
+            "schema": {
+              "title": "Registry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Artifact Registry Api Artifact Registries  Registry Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Artifact Registry",
+        "tags": [
+          "builds"
+        ]
+      }
+    },
     "/api/auth/login": {
       "post": {
         "operationId": "login_api_auth_login_post",
@@ -722,6 +1055,178 @@
         ]
       }
     },
+    "/api/build-nodes": {
+      "get": {
+        "operationId": "list_build_nodes_api_build_nodes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Build Nodes Api Build Nodes Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Build Nodes",
+        "tags": [
+          "builds"
+        ]
+      },
+      "post": {
+        "operationId": "create_build_node_api_build_nodes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuildNodeCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Build Node Api Build Nodes Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Build Node",
+        "tags": [
+          "builds"
+        ]
+      }
+    },
+    "/api/build-nodes/{node_id}": {
+      "delete": {
+        "operationId": "delete_build_node_api_build_nodes__node_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Build Node Api Build Nodes  Node Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Build Node",
+        "tags": [
+          "builds"
+        ]
+      }
+    },
+    "/api/builds/{build_id}": {
+      "get": {
+        "operationId": "get_build_api_builds__build_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "build_id",
+            "required": true,
+            "schema": {
+              "title": "Build Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Build Api Builds  Build Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Build",
+        "tags": [
+          "builds"
+        ]
+      }
+    },
     "/api/deployments": {
       "get": {
         "description": "跨服务最近部署(最新在前),供主页 Dashboard 部署 feed(§9.2)。",
@@ -735,7 +1240,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/ServiceEnvironment"
+                  "type": "string"
                 },
                 {
                   "type": "null"
@@ -792,6 +1297,170 @@
         "summary": "List Recent Deployments",
         "tags": [
           "deployments"
+        ]
+      }
+    },
+    "/api/dist/{filename}": {
+      "get": {
+        "description": "从控制面预置目录返回二进制文件。免鉴权只读;严防路径穿越。",
+        "operationId": "download_binary_api_dist__filename__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filename",
+            "required": true,
+            "schema": {
+              "title": "Filename",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Binary",
+        "tags": [
+          "dist"
+        ]
+      }
+    },
+    "/api/environments": {
+      "get": {
+        "operationId": "list_environments_api_environments_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Environments Api Environments Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Environments",
+        "tags": [
+          "environments"
+        ]
+      },
+      "post": {
+        "operationId": "create_environment_api_environments_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnvironmentCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Environment Api Environments Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Environment",
+        "tags": [
+          "environments"
+        ]
+      }
+    },
+    "/api/environments/{environment_id}": {
+      "delete": {
+        "operationId": "delete_environment_api_environments__environment_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment_id",
+            "required": true,
+            "schema": {
+              "title": "Environment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Environment Api Environments  Environment Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Environment",
+        "tags": [
+          "environments"
         ]
       }
     },
@@ -1054,6 +1723,56 @@
         ]
       }
     },
+    "/api/servers/{server_id}/install-agent": {
+      "post": {
+        "description": "对 SSH 纳管的服务器经 SSH 下发安装 axon-agent(需求4)。\n\n落一条 agent_install task,后台经 SSHExecutor 跑安装脚本(二进制从控制面下载\n端点拉取,离线分发),前端轮询 task 终态。非 SSH 服务器由编排层落 task.failed。",
+        "operationId": "install_agent_api_servers__server_id__install_agent_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Install Agent Api Servers  Server Id  Install Agent Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Install Agent",
+        "tags": [
+          "servers"
+        ]
+      }
+    },
     "/api/servers/{server_id}/test-connection": {
       "post": {
         "operationId": "test_connection_api_servers__server_id__test_connection_post",
@@ -1115,7 +1834,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/ServiceEnvironment"
+                  "type": "string"
                 },
                 {
                   "type": "null"
@@ -1271,6 +1990,188 @@
         "summary": "Delete Service",
         "tags": [
           "services"
+        ]
+      }
+    },
+    "/api/services/{service_id}/artifacts": {
+      "get": {
+        "operationId": "list_service_artifacts_api_services__service_id__artifacts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Service Artifacts Api Services  Service Id  Artifacts Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Service Artifacts",
+        "tags": [
+          "builds"
+        ]
+      }
+    },
+    "/api/services/{service_id}/build": {
+      "post": {
+        "description": "触发一次控制面本地构建(方案 A)。未配 build_config 的服务拒绝(501)。",
+        "operationId": "trigger_build_api_services__service_id__build_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuildRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Trigger Build Api Services  Service Id  Build Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Trigger Build",
+        "tags": [
+          "builds"
+        ]
+      }
+    },
+    "/api/services/{service_id}/builds": {
+      "get": {
+        "operationId": "list_service_builds_api_services__service_id__builds_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Service Builds Api Services  Service Id  Builds Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Service Builds",
+        "tags": [
+          "builds"
         ]
       }
     },
@@ -1691,7 +2592,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/ServiceEnvironment"
+                  "type": "string"
                 },
                 {
                   "type": "null"
@@ -1907,7 +2808,7 @@
     },
     "/api/services/{service_id}/rollback": {
       "post": {
-        "description": "一键回滚(§11.1):重部署上一版制品。与 deploy 同权限点,异步落 ROLLBACK task。",
+        "description": "一键回滚(§11.1):重部署上一版制品。与 deploy 同权限点,异步落 ROLLBACK task。\n\nprod 高危操作在审批开关开启时不直接执行,先落 pending 审批(§10.2/§13),批准后\n才由 approvals API 执行。",
         "operationId": "rollback_service_api_services__service_id__rollback_post",
         "parameters": [
           {

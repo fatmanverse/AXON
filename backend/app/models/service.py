@@ -77,6 +77,11 @@ class Service(Base, TimestampMixin):
         default=ReloadMode.RESTART,
     )
     health_check: Mapped[dict[str, Any] | None] = mapped_column(JSONVariant, nullable=True)
+    # 本地构建默认配置(照 health_check 先例,可空 JSON):承载「填仓库即构建」所需的
+    # 缺省项——repo_url/git_ref/test_command/build_command/artifact_type(generic|docker)
+    # 及各形态坐标(generic 的 output_path、docker 的 image_name/dockerfile/registry_id)。
+    # 每次触发构建可用请求体覆盖其中的 git_ref/version。未配置则该服务不支持本地构建。
+    build_config: Mapped[dict[str, Any] | None] = mapped_column(JSONVariant, nullable=True)
     placements: Mapped[list["ServicePlacement"]] = relationship(
         back_populates="service", cascade="all, delete-orphan"
     )

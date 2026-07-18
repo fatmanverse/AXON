@@ -21,6 +21,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
         "deployment:*:*",
         "approval:*:*",
         "environment:*:*",
+        "buildnode:*:*",
     ],
     "developer": [
         "service:dev:*",

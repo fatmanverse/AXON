@@ -52,9 +52,11 @@ export interface paths {
         put?: never;
         /**
          * Approve
-         * @description 批准一条待审批的高危操作,建 task 执行原动作(当前支持 deploy)。
+         * @description 批准一条待审批的高危操作(deploy / rollback / delete),建 task 执行原动作。
          *
-         *     批准者需 approval:{env}:approve 权限,且不能是发起人本人(§13 四眼原则)。
+         *     批准者需 approval:{env}:approve 权限,且不能是发起人本人(§13 四眼原则)。批准后
+         *     走与直接执行完全一致的编排路径:deploy/rollback 经 DeploymentService,delete 经
+         *     LifecycleService,保证「批准执行」与「直接执行」无差异。
          */
         post: operations["approve_api_approvals__approval_id__approve_post"];
         delete?: never;
@@ -78,6 +80,41 @@ export interface paths {
          */
         post: operations["reject_api_approvals__approval_id__reject_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/artifact-registries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Artifact Registries */
+        get: operations["list_artifact_registries_api_artifact_registries_get"];
+        put?: never;
+        /** Create Artifact Registry */
+        post: operations["create_artifact_registry_api_artifact_registries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/artifact-registries/{registry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Artifact Registry */
+        delete: operations["delete_artifact_registry_api_artifact_registries__registry_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -117,6 +154,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/build-nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Build Nodes */
+        get: operations["list_build_nodes_api_build_nodes_get"];
+        put?: never;
+        /** Create Build Node */
+        post: operations["create_build_node_api_build_nodes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/build-nodes/{node_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Build Node */
+        delete: operations["delete_build_node_api_build_nodes__node_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/builds/{build_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Build */
+        get: operations["get_build_api_builds__build_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/deployments": {
         parameters: {
             query?: never;
@@ -132,6 +221,61 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dist/{filename}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Binary
+         * @description 从控制面预置目录返回二进制文件。免鉴权只读;严防路径穿越。
+         */
+        get: operations["download_binary_api_dist__filename__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/environments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Environments */
+        get: operations["list_environments_api_environments_get"];
+        put?: never;
+        /** Create Environment */
+        post: operations["create_environment_api_environments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/environments/{environment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Environment */
+        delete: operations["delete_environment_api_environments__environment_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -206,6 +350,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/install-agent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Install Agent
+         * @description 对 SSH 纳管的服务器经 SSH 下发安装 axon-agent(需求4)。
+         *
+         *     落一条 agent_install task,后台经 SSHExecutor 跑安装脚本(二进制从控制面下载
+         *     端点拉取,离线分发),前端轮询 task 终态。非 SSH 服务器由编排层落 task.failed。
+         */
+        post: operations["install_agent_api_servers__server_id__install_agent_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/test-connection": {
         parameters: {
             query?: never;
@@ -253,6 +420,60 @@ export interface paths {
         post?: never;
         /** Delete Service */
         delete: operations["delete_service_api_services__service_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/services/{service_id}/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Service Artifacts */
+        get: operations["list_service_artifacts_api_services__service_id__artifacts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/services/{service_id}/build": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trigger Build
+         * @description 触发一次控制面本地构建(方案 A)。未配 build_config 的服务拒绝(501)。
+         */
+        post: operations["trigger_build_api_services__service_id__build_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/services/{service_id}/builds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Service Builds */
+        get: operations["list_service_builds_api_services__service_id__builds_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -482,6 +703,9 @@ export interface paths {
         /**
          * Rollback Service
          * @description 一键回滚(§11.1):重部署上一版制品。与 deploy 同权限点,异步落 ROLLBACK task。
+         *
+         *     prod 高危操作在审批开关开启时不直接执行,先落 pending 审批(§10.2/§13),批准后
+         *     才由 approvals API 执行。
          */
         post: operations["rollback_service_api_services__service_id__rollback_post"];
         delete?: never;
@@ -643,6 +867,66 @@ export interface components {
             reason?: string | null;
         };
         /**
+         * ArtifactRegistryCreate
+         * @description 建制品库入参。docker 库配 url;credential 收明文由 API 换 vault id(不落明文)。
+         */
+        ArtifactRegistryCreate: {
+            /** Credential */
+            credential?: string | null;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Name */
+            name: string;
+            type: components["schemas"]["ArtifactRegistryType"];
+            /**
+             * Url
+             * @default
+             */
+            url: string;
+        };
+        /**
+         * ArtifactRegistryType
+         * @description 制品库类型:docker 镜像仓 / 通用文件仓(tar 包等)。按需再扩 pypi/npm。
+         * @enum {string}
+         */
+        ArtifactRegistryType: "docker" | "generic";
+        /**
+         * BuildNodeCreate
+         * @description 注册构建节点入参(架构预留:一期只跑本地节点,此为后续注册用)。
+         */
+        BuildNodeCreate: {
+            /** Host */
+            host?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Max Concurrent
+             * @default 1
+             */
+            max_concurrent: number;
+            /** Name */
+            name: string;
+            /** Server Id */
+            server_id?: string | null;
+            /** Ssh Credential Id */
+            ssh_credential_id?: string | null;
+        };
+        /**
+         * BuildRequestBody
+         * @description UI 触发构建入参:可覆盖服务 build_config 的默认 ref/version;缺省则用配置默认。
+         */
+        BuildRequestBody: {
+            /** Git Ref */
+            git_ref?: string | null;
+            /** Version */
+            version?: string | null;
+        };
+        /**
          * ConfigFormat
          * @enum {string}
          */
@@ -684,6 +968,29 @@ export interface components {
          * @enum {string}
          */
         DeploymentStrategy: "rolling" | "canary" | "blue-green" | "recreate";
+        /**
+         * EnvironmentCreate
+         * @description 创建环境入参。name 为稳定标识(唯一);requires_approval 决定该环境是否走审批流。
+         */
+        EnvironmentCreate: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Display Name
+             * @default
+             */
+            display_name: string;
+            /** Name */
+            name: string;
+            /**
+             * Requires Approval
+             * @default false
+             */
+            requires_approval: boolean;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -726,6 +1033,13 @@ export interface components {
             access_mode: components["schemas"]["AccessMode"];
             /** Agent Id */
             agent_id?: string | null;
+            /**
+             * Auth Type
+             * @default key
+             */
+            auth_type: string;
+            /** Environment */
+            environment: string;
             /** Host */
             host: string;
             /** Labels */
@@ -734,6 +1048,8 @@ export interface components {
             };
             /** Name */
             name: string;
+            /** Ssh Password */
+            ssh_password?: string | null;
             /**
              * Ssh Port
              * @default 22
@@ -746,9 +1062,14 @@ export interface components {
         };
         /** ServiceCreate */
         ServiceCreate: {
+            /** Build Config */
+            build_config?: {
+                [key: string]: unknown;
+            } | null;
             /** Desired Version */
             desired_version?: string | null;
-            env: components["schemas"]["ServiceEnvironment"];
+            /** Env */
+            env: string;
             /** Health Check */
             health_check?: {
                 [key: string]: unknown;
@@ -763,11 +1084,6 @@ export interface components {
                 [key: string]: unknown;
             };
         };
-        /**
-         * ServiceEnvironment
-         * @enum {string}
-         */
-        ServiceEnvironment: "dev" | "staging" | "prod";
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -931,6 +1247,96 @@ export interface operations {
             };
         };
     };
+    list_artifact_registries_api_artifact_registries_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    create_artifact_registry_api_artifact_registries_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArtifactRegistryCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_artifact_registry_api_artifact_registries__registry_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                registry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     login_api_auth_login_post: {
         parameters: {
             query?: never;
@@ -988,16 +1394,260 @@ export interface operations {
             };
         };
     };
+    list_build_nodes_api_build_nodes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    create_build_node_api_build_nodes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BuildNodeCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_build_node_api_build_nodes__node_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_build_api_builds__build_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                build_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_recent_deployments_api_deployments_get: {
         parameters: {
             query?: {
                 /** @description 按环境过滤 */
-                env?: components["schemas"]["ServiceEnvironment"] | null;
+                env?: string | null;
                 /** @description 返回条数上限 */
                 limit?: number;
             };
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_binary_api_dist__filename__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                filename: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_environments_api_environments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    create_environment_api_environments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnvironmentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_environment_api_environments__environment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -1188,6 +1838,39 @@ export interface operations {
             };
         };
     };
+    install_agent_api_servers__server_id__install_agent_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     test_connection_api_servers__server_id__test_connection_post: {
         parameters: {
             query?: never;
@@ -1225,7 +1908,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description 按环境过滤 */
-                env?: components["schemas"]["ServiceEnvironment"] | null;
+                env?: string | null;
                 /** @description 按运行时过滤 */
                 runtime?: components["schemas"]["Runtime"] | null;
             };
@@ -1305,6 +1988,113 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_service_artifacts_api_services__service_id__artifacts_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                service_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trigger_build_api_services__service_id__build_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BuildRequestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_service_builds_api_services__service_id__builds_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                service_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1571,7 +2361,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description 按环境过滤 */
-                env?: components["schemas"]["ServiceEnvironment"] | null;
+                env?: string | null;
             };
             header?: never;
             path: {

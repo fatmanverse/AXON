@@ -12,6 +12,7 @@
 
 import type { AlertSeverity, AlertStatus } from "@/api/alerts";
 import type { ApprovalStatus } from "@/api/approvals";
+import type { BuildStatus } from "@/api/builds";
 import type { DeploymentStatus, DeliveryStatus } from "@/api/deployments";
 import type { AgentStatus } from "@/api/servers";
 import { colors } from "@/theme";
@@ -28,6 +29,15 @@ export const DEPLOYMENT_STATUS: Record<DeploymentStatus, StatusMeta> = {
   success: { color: colors.success, label: "成功" },
   failed: { color: colors.danger, label: "失败" },
   rolled_back: { color: colors.neutral, label: "已回滚" },
+};
+
+/** 构建状态(构建页 / 构建历史共用)。canceled 归中性(主动取消非失败)。 */
+export const BUILD_STATUS: Record<BuildStatus, StatusMeta> = {
+  pending: { color: colors.neutral, label: "排队中" },
+  running: { color: colors.warning, label: "构建中" },
+  success: { color: colors.success, label: "成功" },
+  failed: { color: colors.danger, label: "失败" },
+  canceled: { color: colors.neutral, label: "已取消" },
 };
 
 /** 告警级别(主页告警区 / 告警页共用)。 */

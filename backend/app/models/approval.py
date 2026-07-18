@@ -51,7 +51,8 @@ class Approval(Base, TimestampMixin):
         nullable=False,
     )
     service_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
-    env: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    # 长度与 environments.name / services.env 对齐(64),避免自定义长环境名截断。
+    env: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     # 执行该动作所需的参数(如 deploy 的 version/strategy/git_sha),批准后据此建 task
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSONVariant, nullable=True)
     status: Mapped[ApprovalStatus] = mapped_column(
