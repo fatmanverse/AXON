@@ -16,6 +16,7 @@ class DeploymentOut(BaseModel):
     git_sha: str | None = None
     version: str | None = None
     artifact: str | None = None
+    artifact_id: str | None = None
     strategy: DeploymentStrategy
     source: DeploymentSource
     pipeline_id: str | None = None

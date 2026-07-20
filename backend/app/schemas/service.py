@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.deployment import DeploymentStrategy
 from app.models.service import ObservedStatus, ReloadMode, Runtime
@@ -50,11 +50,18 @@ class ServiceOut(BaseModel):
 
 
 class DeployRequestBody(BaseModel):
-    """UI 触发部署入参(§15.2 body:{version, strategy})。env 取自服务本身,不由前端传。"""
+    """UI 触发部署入参。version 走 CI,artifact_id 走制品直发；env 取自服务本身。"""
 
-    version: str = Field(min_length=1, max_length=128)
+    version: str | None = Field(default=None, max_length=128)
     strategy: DeploymentStrategy = DeploymentStrategy.ROLLING
     git_sha: str | None = Field(default=None, max_length=64)
+    artifact_id: str | None = Field(default=None, min_length=32, max_length=32)
+
+    @model_validator(mode="after")
+    def require_version_or_artifact(self) -> "DeployRequestBody":
+        if self.artifact_id is None and not self.version:
+            raise ValueError("CI 部署需 version")
+        return self
 
 
 class PromoteRequestBody(BaseModel):

@@ -14,6 +14,7 @@ import pytest
 import pytest_asyncio
 
 from app.core.db import Database
+from app.core.errors import AppError
 from app.models.artifact import ArtifactRegistryType
 from app.models.base import Base
 from app.models.build import BuildSource, BuildStatus
@@ -139,3 +140,12 @@ async def test_create_artifact_and_list_for_service(db):
         rows = await repo.list_for_service("svc1")
         assert len(rows) == 1
         assert rows[0].uri.endswith("app-1.0.0.tar.gz")
+
+
+async def test_get_artifact_missing_raises_404(db):
+    async with db.session() as session:
+        with pytest.raises(AppError) as exc:
+            await ArtifactRepository(session).get_artifact("0" * 32)
+
+    assert exc.value.code == "artifact_not_found"
+    assert exc.value.status_code == 404

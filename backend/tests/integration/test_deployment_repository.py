@@ -58,6 +58,18 @@ async def test_get_returns_created(db):
     assert fetched.git_sha == "abc123"
 
 
+async def test_create_persists_artifact_id(db):
+    artifact_id = "a" * 32
+    async with db.session() as session:
+        dep = await _create(repo=DeploymentRepository(session), artifact_id=artifact_id)
+        dep_id = dep.id
+
+    async with db.session() as session:
+        fetched = await DeploymentRepository(session).get(dep_id)
+
+    assert fetched.artifact_id == artifact_id
+
+
 async def test_get_missing_raises_404(db):
     from app.core.errors import AppError
 

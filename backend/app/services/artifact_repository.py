@@ -84,6 +84,12 @@ class ArtifactRepository:
 
     # ── artifact ──────────────────────────────────────────────────────
 
+    async def get_artifact(self, artifact_id: str) -> Artifact:
+        artifact = await self._session.get(Artifact, artifact_id)
+        if artifact is None:
+            raise AppError("artifact_not_found", "制品不存在", status_code=404)
+        return artifact
+
     async def create_artifact(
         self,
         *,
