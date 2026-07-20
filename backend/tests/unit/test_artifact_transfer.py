@@ -105,12 +105,13 @@ async def test_upload_creates_remote_parent_and_puts_local_file(tmp_path: Path):
             "username": "deploy",
             "connect_timeout": 10.0,
             "known_hosts": None,
-            "client_key": "-----BEGIN PRIVATE KEY-----\nfake\n",
+            "client_keys": "-----BEGIN PRIVATE KEY-----\nfake\n",
         }
     ]
+    assert "password" not in connector.calls[0]
 
 
-async def test_upload_uses_password_auth_without_client_key(tmp_path: Path):
+async def test_upload_uses_password_auth_without_client_keys(tmp_path: Path):
     artifact = tmp_path / "artifact.tar.gz"
     artifact.touch()
     store, credential_id = _secret_store("s3cr3t")
@@ -130,7 +131,7 @@ async def test_upload_uses_password_auth_without_client_key(tmp_path: Path):
     await transfer.upload(str(artifact), "/tmp/artifact.tar.gz")
 
     assert connector.calls[0]["password"] == "s3cr3t"
-    assert "client_key" not in connector.calls[0]
+    assert "client_keys" not in connector.calls[0]
 
 
 async def test_upload_missing_local_file_raises_404_before_connecting(tmp_path: Path):
