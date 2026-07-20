@@ -54,7 +54,7 @@ class SshArtifactTransfer:
             if self._target.auth_type == "password":
                 kwargs["password"] = secret
             else:
-                kwargs["client_keys"] = secret
+                kwargs["client_keys"] = [secret.encode()]
 
             async with self._connector(**kwargs) as connection:
                 async with connection.start_sftp_client() as sftp:

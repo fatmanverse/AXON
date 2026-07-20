@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import asyncssh
 import pytest
 
 from app.adapters.agent_gateway import AgentGateway
@@ -105,9 +106,10 @@ async def test_upload_creates_remote_parent_and_puts_local_file(tmp_path: Path):
             "username": "deploy",
             "connect_timeout": 10.0,
             "known_hosts": None,
-            "client_keys": "-----BEGIN PRIVATE KEY-----\nfake\n",
+            "client_keys": [b"-----BEGIN PRIVATE KEY-----\nfake\n"],
         }
     ]
+    assert isinstance(connector.calls[0]["client_keys"], list)
     assert "password" not in connector.calls[0]
 
 
@@ -132,6 +134,14 @@ async def test_upload_uses_password_auth_without_client_keys(tmp_path: Path):
 
     assert connector.calls[0]["password"] == "s3cr3t"
     assert "client_keys" not in connector.calls[0]
+
+
+def test_asyncssh_accepts_in_memory_private_key_bytes():
+    private_key = asyncssh.generate_private_key("ssh-ed25519").export_private_key()
+
+    options = asyncssh.SSHClientConnectionOptions(client_keys=[private_key])
+
+    assert len(options.client_keys) == 1
 
 
 async def test_upload_missing_local_file_raises_404_before_connecting(tmp_path: Path):
