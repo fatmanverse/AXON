@@ -13,10 +13,23 @@ from typing import Any
 
 from app.adapters.agent_gateway import AgentGateway
 from app.adapters.agent_gateway_registry import AgentGatewayRegistry
+from app.adapters.artifact_transfer import ArtifactTransfer, SshArtifactTransfer
 from app.adapters.executor import Executor
 from app.adapters.ssh_executor import SSHExecutor, SSHTarget
+from app.core.errors import AppError
 from app.core.secrets import SecretStore
 from app.models.server import AccessMode, Server
+
+
+def build_ssh_target_for_server(server: Server) -> SSHTarget:
+    labels = server.labels or {}
+    return SSHTarget(
+        host=server.host,
+        port=int(labels.get("ssh_port", 22)),
+        username=str(labels.get("ssh_username", "root")),
+        credential_id=server.ssh_credential_id or "",
+        auth_type=str(labels.get("auth_type", "key")),
+    )
 
 
 def build_executor_for_server(
@@ -38,12 +51,25 @@ def build_executor_for_server(
             return agent_registry.for_agent(server.agent_id)
         return AgentGateway()
 
-    labels = server.labels or {}
-    target = SSHTarget(
-        host=server.host,
-        port=int(labels.get("ssh_port", 22)),
-        username=str(labels.get("ssh_username", "root")),
-        credential_id=server.ssh_credential_id or "",
-        auth_type=str(labels.get("auth_type", "key")),
-    )
+    target = build_ssh_target_for_server(server)
     return SSHExecutor(target, secrets, connector=connector)
+
+
+def build_artifact_transfer_for_server(
+    server: Server | None,
+    secrets: SecretStore,
+    *,
+    connector: Callable[..., Any] | None = None,
+) -> ArtifactTransfer:
+    """按 server.access_mode 构造制品传输器,目前仅 SSH 支持 SFTP。"""
+    if server is None or server.access_mode == AccessMode.AGENT:
+        raise AppError(
+            "artifact_transfer_not_supported",
+            "当前服务器接入模式不支持制品上传",
+            status_code=501,
+        )
+    return SshArtifactTransfer(
+        build_ssh_target_for_server(server),
+        secrets,
+        connector=connector,
+    )
