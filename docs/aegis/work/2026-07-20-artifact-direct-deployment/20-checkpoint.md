@@ -5,9 +5,9 @@
 - Current todo: Task 1 — Add Artifact Request and Persistence Contracts。
 - Completed todos: design approval、written spec approval、implementation plan approval、isolated branch setup。
 - Active slice: schema/repository contract only。
-- Evidence refs: approved spec and plan; baseline tests pending。
+- Evidence refs: backend baseline 556 passed；frontend 63 passed，lint/build passed。
 - Blocked on: none。
-- Next step: run isolated baseline checks, then dispatch Task 1 implementer。
+- Next step: dispatch Task 1 implementer with schema/repository-only boundary。
 
 ## ResumeStateHint
 
