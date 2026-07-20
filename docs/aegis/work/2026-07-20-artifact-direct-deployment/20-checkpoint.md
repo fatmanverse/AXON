@@ -2,12 +2,12 @@
 
 ## TodoCheckpointDraft
 
-- Current todo: Task 1 — Add Artifact Request and Persistence Contracts。
-- Completed todos: design approval、written spec approval、implementation plan approval、isolated branch setup。
-- Active slice: schema/repository contract only。
-- Evidence refs: backend baseline 556 passed；frontend 63 passed，lint/build passed。
+- Current todo: Task 2 — Add Narrow SSH/SFTP Artifact Transfer。
+- Completed todos: setup；Task 1 implementation + spec review + quality review。
+- Active slice: ArtifactTransfer protocol、SSH/SFTP implementation、executor factory target reuse。
+- Evidence refs: baseline；Task 1 commit `a237df7`；23 target tests + 17 CI regression passed；both reviews approved。
 - Blocked on: none。
-- Next step: dispatch Task 1 implementer with schema/repository-only boundary。
+- Next step: dispatch fresh Task 2 implementer with transfer-only boundary。
 
 ## ResumeStateHint
 
@@ -18,8 +18,8 @@
 
 ## DriftCheckDraft
 
-- Original intent served: yes。
-- Compatibility boundary held: yes；no business edits yet。
-- New owner/fallback introduced: only approved planned owner，not implemented。
+- Original intent served: yes；Task 1 established approved artifact contract。
+- Compatibility boundary held: yes；old CI schema remains valid。
+- New owner/fallback introduced: no；repository methods stay canonical。
 - Retirement track explicit: yes，plan retains Executor.deploy review trigger。
 - Decision: `continue`。

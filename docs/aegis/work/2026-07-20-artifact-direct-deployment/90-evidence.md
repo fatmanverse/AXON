@@ -10,7 +10,12 @@
 
 ## Task Evidence
 
-- Task 1: pending。
+- Task 1 commit: `a237df7aedffbdef5292c2912efc9732e80bd45b`。
+- Task 1 RED: 5 expected failures。
+- Task 1 GREEN: 23 target tests passed；Ruff/Black/diff check passed。
+- Task 1 compatibility: old CI deploy/approval regression 17 passed。
+- Task 1 spec review: compliant。
+- Task 1 quality review: no Critical/Important/Minor findings；advisory ready yes。
 - Task 2: pending。
 - Task 3: pending。
 - Task 4: pending。
