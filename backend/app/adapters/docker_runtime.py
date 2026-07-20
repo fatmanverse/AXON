@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import shlex
 
-from app.adapters.executor import Executor, ServiceStatus
+from app.adapters.executor import DeploySpec, Executor, ServiceStatus
 from app.core.errors import AppError
 from app.core.logging import get_logger
 
@@ -78,6 +78,43 @@ class DockerRuntime:
             running=state == _RUNNING_STATE,
             detail=state or result.stderr.strip(),
         )
+
+    async def deploy(self, spec: DeploySpec) -> None:
+        """发布制品:pull 镜像 → 幂等清旧容器 → run(带 env/端口/重启策略)。
+
+        自建部署的 docker 语义(二期):把构建产出的镜像真正拉到目标机跑起来。
+        - pull:确保目标机有该镜像(内网仓/公网仓由 docker 配置决定,本层不管)。
+        - rm -f:幂等清掉同名旧容器(不存在时 docker 报错,故此步不判失败、忽略其非 0)。
+        - run -d:后台拉起,--restart unless-stopped 让宿主重启后自动恢复。
+        env 与端口来自 runtime_ref/配置,一律 shlex.quote 转义防注入。
+        """
+        image = spec.image or spec.artifact
+        name = spec.container_name
+        if not image or not name:
+            raise AppError(
+                "docker_action_failed",
+                "docker 部署需 image 与 container_name",
+                status_code=400,
+            )
+        q_image = shlex.quote(image)
+        q_name = shlex.quote(name)
+        await self._run_lifecycle("deploy-pull", name, f"docker pull {q_image}")
+        # 清旧容器:同名容器可能不存在,忽略其失败(幂等),不因此中断部署。
+        await self._executor.exec(f"docker rm -f {q_name}")
+        env_flags = " ".join(f"-e {shlex.quote(f'{k}={v}')}" for k, v in (spec.env or {}).items())
+        port_flags = " ".join(f"-p {shlex.quote(p)}" for p in (spec.ports or []))
+        run_cmd = " ".join(
+            part
+            for part in [
+                f"docker run -d --name {q_name}",
+                "--restart unless-stopped",
+                env_flags,
+                port_flags,
+                q_image,
+            ]
+            if part
+        )
+        await self._run_lifecycle("deploy-run", name, run_cmd)
 
     async def _run_lifecycle(self, action: str, container_name: str, command: str) -> None:
         """执行一条变更类 docker 命令,非 0 退出即抛 AppError。"""

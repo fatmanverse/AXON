@@ -45,8 +45,8 @@ def _bootstrap_script(version: str, port: int, base_url: str | None = None) -> s
         )
     else:
         download = (
-            f"  BASE=https://github.com/prometheus/node_exporter/releases/download; "
-            f'  curl -fsSL -o node_exporter.tar.gz "${{BASE}}/v${{VER}}/${{DIR}}.tar.gz"; '
+            "  BASE=https://github.com/prometheus/node_exporter/releases/download; "
+            '  curl -fsSL -o node_exporter.tar.gz "${BASE}/v${VER}/${DIR}.tar.gz"; '
         )
     return (
         "set -e; "

@@ -29,10 +29,25 @@ class CommandResult:
 
 @dataclass(frozen=True)
 class DeploySpec:
-    """部署规格:制品地址 + 运行环境变量,runtime 差异由具体执行器解释。"""
+    """部署规格:制品地址 + 运行环境变量 + 各 runtime 的发布目标(二期自建部署)。
+
+    artifact 是制品的通用寻址(镜像坐标或 tar 包路径);其余字段按 runtime 择用:
+    - docker/k8s 用 image(含 tag/digest 的镜像坐标)。
+    - docker 用 container_name / ports;systemd 用 unit_name / deploy_path;
+      k8s 用 workload / namespace。
+    不同 runtime 只读自己需要的字段,互不干扰(未用到的留 None)。
+    """
 
     artifact: str
     env: dict[str, str] = field(default_factory=dict)
+    image: str | None = None
+    container_name: str | None = None
+    unit_name: str | None = None
+    deploy_path: str | None = None
+    workload: str | None = None
+    namespace: str | None = None
+    ports: list[str] | None = None
+    replicas: int | None = None
 
 
 @dataclass(frozen=True)

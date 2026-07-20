@@ -67,7 +67,9 @@ async def app_client(monkeypatch, tmp_path):
             async with db.engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
             async with db.session() as session:
-                await AuthService(session, settings).create_user("admin", "admin-pw", roles=["admin"])
+                await AuthService(session, settings).create_user(
+                    "admin", "admin-pw", roles=["admin"]
+                )
                 await EnvironmentRepository(session).create(
                     EnvironmentCreate(name="dev", display_name="开发", requires_approval=False)
                 )
@@ -133,9 +135,7 @@ async def test_install_agent_rejects_non_ssh_server(app_client):
         )
         agent_server_id = created.id
 
-    resp = await client.post(
-        f"/api/servers/{agent_server_id}/install-agent", headers=_auth(token)
-    )
+    resp = await client.post(f"/api/servers/{agent_server_id}/install-agent", headers=_auth(token))
     assert resp.status_code == 400
 
 
@@ -151,7 +151,5 @@ async def test_install_agent_requires_permission(app_client):
     vresp = await client.post("/api/auth/login", json={"username": "viewer", "password": "v-pw"})
     vtoken = vresp.json()["data"]["access_token"]
 
-    resp = await client.post(
-        f"/api/servers/{server_id}/install-agent", headers=_auth(vtoken)
-    )
+    resp = await client.post(f"/api/servers/{server_id}/install-agent", headers=_auth(vtoken))
     assert resp.status_code == 403

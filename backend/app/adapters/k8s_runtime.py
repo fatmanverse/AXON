@@ -22,7 +22,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from app.adapters.executor import ServiceStatus
+from app.adapters.executor import DeploySpec, ServiceStatus
 from app.core.errors import AppError
 from app.core.logging import get_logger
 
@@ -94,18 +94,14 @@ class K8sRuntime:
         body = {
             "spec": {
                 "template": {
-                    "metadata": {
-                        "annotations": {_RESTART_ANNOTATION: self._clock().isoformat()}
-                    }
+                    "metadata": {"annotations": {_RESTART_ANNOTATION: self._clock().isoformat()}}
                 }
             }
         }
         await self._call(
             "restart",
             workload,
-            self._api.patch_namespaced_deployment(
-                name=workload, namespace=namespace, body=body
-            ),
+            self._api.patch_namespaced_deployment(name=workload, namespace=namespace, body=body),
         )
 
     async def delete(self, namespace: str, workload: str) -> None:
@@ -136,6 +132,45 @@ class K8sRuntime:
             name=workload,
             running=ready > 0,
             detail=f"{ready}/{desired} ready",
+        )
+
+    async def deploy(self, spec: DeploySpec) -> None:
+        """发布制品:patch Deployment 首个容器的镜像(set-image 触发滚动更新)。
+
+        与 systemd/docker 的 deploy 不同,k8s 不 pull/run——把目标镜像 patch 进
+        Deployment 模板,由集群按现有滚动策略自行拉取新镜像、逐步替换 Pod。
+        namespace/workload 定位工作负载,image 为目标镜像坐标(含 tag/digest)。
+        失败抛 AppError(k8s_action_failed),与生命周期动作失败语义一致。
+        """
+        if not spec.namespace or not spec.workload:
+            raise AppError(
+                "invalid_runtime_ref",
+                "k8s 部署需 namespace 与 workload",
+                status_code=400,
+            )
+        if not spec.image:
+            raise AppError(
+                "invalid_deploy_spec",
+                "k8s 部署需 image(目标镜像坐标)",
+                status_code=400,
+            )
+        # JSON Patch 按索引只改首个容器镜像,不假设容器名与 Deployment 同名。
+        body = [
+            {
+                "op": "replace",
+                "path": "/spec/template/spec/containers/0/image",
+                "value": spec.image,
+            }
+        ]
+        await self._call(
+            "deploy",
+            spec.workload,
+            self._api.patch_namespaced_deployment(
+                name=spec.workload,
+                namespace=spec.namespace,
+                body=body,
+                _content_type="application/json-patch+json",
+            ),
         )
 
     async def _call(self, action: str, workload: str, coro: Any) -> None:

@@ -12,7 +12,6 @@ executor 经 executor_factory 注入,便于隔离真实子进程。
 
 from __future__ import annotations
 
-import pytest
 import pytest_asyncio
 
 from app.adapters.executor import CommandResult, DeploySpec, Executor, ServiceStatus

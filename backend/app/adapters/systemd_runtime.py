@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import shlex
 
-from app.adapters.executor import Executor, ServiceStatus
+from app.adapters.executor import DeploySpec, Executor, ServiceStatus
 from app.core.errors import AppError
 from app.core.logging import get_logger
 
@@ -71,6 +71,34 @@ class SystemdRuntime:
             running=state == _ACTIVE_STATE,
             detail=state or result.stderr.strip(),
         )
+
+    async def deploy(self, spec: DeploySpec) -> None:
+        """发布制品:解包 tar 制品到部署目录 → daemon-reload → restart unit。
+
+        自建部署的 systemd 语义(二期,MVP):制品是一个 tar 包,内含就位的二进制/
+        文件树。发布 = 把 tar 解包覆盖到部署目录,重载 systemd 后重启服务。
+        - mkdir -p 部署目录(幂等);tar 解包失败即抛(制品损坏/路径无权限)。
+        - daemon-reload:unit 文件可能随制品更新,重载以生效。
+        - restart:让新制品生效。artifact/deploy_path/unit 一律 shlex.quote 防注入。
+        复杂就位(多文件权限/用户切换)超出 MVP,留后续。
+        """
+        artifact = spec.artifact
+        unit = spec.unit_name
+        deploy_path = spec.deploy_path
+        if not artifact or not unit or not deploy_path:
+            raise AppError(
+                "systemd_action_failed",
+                "systemd 部署需 artifact、unit_name 与 deploy_path",
+                status_code=400,
+            )
+        q_art = shlex.quote(artifact)
+        q_dir = shlex.quote(deploy_path)
+        # 解包覆盖到部署目录:mkdir -p 幂等建目录,tar 解包失败即整体非 0。
+        await self._run_lifecycle(
+            "deploy-unpack", unit, f"mkdir -p {q_dir} && tar xzf {q_art} -C {q_dir}"
+        )
+        await self._run_lifecycle("deploy-reload", unit, "systemctl daemon-reload")
+        await self._run_lifecycle("deploy-restart", unit, f"systemctl restart {shlex.quote(unit)}")
 
     async def _run_lifecycle(self, action: str, unit_name: str, command: str) -> None:
         """执行一条变更类 systemctl 命令,非 0 退出即抛 AppError。"""

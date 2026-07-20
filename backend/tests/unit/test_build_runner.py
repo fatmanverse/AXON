@@ -51,31 +51,31 @@ class FakeExecutor(Executor):
 
 
 def _generic_spec(**overrides) -> BuildSpec:
-    defaults = dict(
-        repo_url="https://git.example.com/team/app.git",
-        git_ref="main",
-        workspace="/var/lib/axon/builds/b1",
-        test_command="make test",
-        build_command="make build",
-        artifact_type="generic",
-        output_path="dist",
-        artifact_path="/var/lib/axon/artifacts/app-1.0.0.tar.gz",
-    )
+    defaults = {
+        "repo_url": "https://git.example.com/team/app.git",
+        "git_ref": "main",
+        "workspace": "/var/lib/axon/builds/b1",
+        "test_command": "make test",
+        "build_command": "make build",
+        "artifact_type": "generic",
+        "output_path": "dist",
+        "artifact_path": "/var/lib/axon/artifacts/app-1.0.0.tar.gz",
+    }
     defaults.update(overrides)
     return BuildSpec(**defaults)
 
 
 def _docker_spec(**overrides) -> BuildSpec:
-    defaults = dict(
-        repo_url="https://git.example.com/team/app.git",
-        git_ref="main",
-        workspace="/var/lib/axon/builds/b2",
-        test_command="make test",
-        build_command="make build",
-        artifact_type="docker",
-        image_ref="registry.example.com/team/app:1.0.0",
-        dockerfile="Dockerfile",
-    )
+    defaults = {
+        "repo_url": "https://git.example.com/team/app.git",
+        "git_ref": "main",
+        "workspace": "/var/lib/axon/builds/b2",
+        "test_command": "make test",
+        "build_command": "make build",
+        "artifact_type": "docker",
+        "image_ref": "registry.example.com/team/app:1.0.0",
+        "dockerfile": "Dockerfile",
+    }
     defaults.update(overrides)
     return BuildSpec(**defaults)
 

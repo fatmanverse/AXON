@@ -14,8 +14,8 @@ import pytest
 import pytest_asyncio
 
 from app.core.db import Database
-from app.models.base import Base
 from app.models.artifact import ArtifactRegistryType
+from app.models.base import Base
 from app.models.build import BuildSource, BuildStatus
 from app.services.artifact_repository import ArtifactRepository
 from app.services.build_node_repository import BuildNodeRepository

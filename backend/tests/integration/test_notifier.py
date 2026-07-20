@@ -13,8 +13,6 @@ POST JSON webhook 形态,故用统一 WebhookNotifier 承载,消息体由各渠�
 
 from __future__ import annotations
 
-import pytest
-
 from app.services.notifier import (
     NoopNotifier,
     NotificationMessage,
@@ -37,7 +35,7 @@ class _FakeHttp:
         self.raise_exc = raise_exc
         self.calls: list[dict] = []
 
-    async def __aenter__(self) -> "_FakeHttp":
+    async def __aenter__(self) -> _FakeHttp:
         return self
 
     async def __aexit__(self, *exc: object) -> None:

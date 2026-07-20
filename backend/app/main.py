@@ -7,12 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.adapters.agent_gateway_registry import AgentGatewayRegistry
 from app.api import (
-    dist,
     alerts,
     approvals,
     auth,
     builds,
     deployments,
+    dist,
     environments,
     health,
     metrics,

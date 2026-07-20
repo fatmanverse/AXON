@@ -9,8 +9,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { BuildsPage } from "@/pages/BuildsPage";
 import { listServices } from "@/api/services";
-import { listBuilds, listArtifacts, triggerBuild } from "@/api/builds";
-import { pollTaskUntilDone } from "@/api/taskPolling";
+import { listBuilds, listArtifacts } from "@/api/builds";
 
 vi.mock("@/api/services", () => ({
   listServices: vi.fn(),
@@ -20,10 +19,6 @@ vi.mock("@/api/builds", () => ({
   listBuilds: vi.fn(),
   listArtifacts: vi.fn(),
   triggerBuild: vi.fn(),
-}));
-
-vi.mock("@/api/taskPolling", () => ({
-  pollTaskUntilDone: vi.fn(),
 }));
 
 const renderPage = (): void => {

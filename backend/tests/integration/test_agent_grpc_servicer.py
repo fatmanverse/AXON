@@ -70,7 +70,6 @@ async def test_heartbeat_keeps_online_and_command_dispatched():
     mgr = AgentConnectionManager(heartbeat_timeout=100.0)
     servicer = AgentServicer(mgr, clock=lambda: 0.0)
 
-    inbound = asyncio.Queue()
     stop = asyncio.Event()
 
     async def request_iter():

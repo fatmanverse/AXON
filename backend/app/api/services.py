@@ -54,10 +54,10 @@ from app.services.approval_repository import ApprovalRepository
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
 from app.services.config_delivery_repository import ConfigDeliveryRepository
-from app.services.environment_repository import EnvironmentRepository
 from app.services.config_delivery_service import ConfigDeliveryService
 from app.services.deployment_repository import DeploymentRepository
 from app.services.deployment_service import DeploymentService, DeployRequest
+from app.services.environment_repository import EnvironmentRepository
 from app.services.executor_factory import build_executor_for_server
 from app.services.lifecycle_service import LifecycleService
 from app.services.notifier import build_notifier, format_deploy_message
@@ -444,9 +444,7 @@ async def _maybe_create_prod_approval(
     审批发起入审计。是否审批的真相源是 environments.requires_approval(§10.2)。
     """
     settings = request.app.state.settings
-    if not settings.require_prod_approval or not await _env_requires_approval(
-        session, service.env
-    ):
+    if not settings.require_prod_approval or not await _env_requires_approval(session, service.env):
         return None
     approval = await ApprovalRepository(session).create(
         service_id=service.id,
@@ -764,9 +762,7 @@ async def list_deployments(
     _: User = Depends(get_current_user),
 ) -> dict:
     """服务的部署历史(最新在前),供部署页与主页 feed。"""
-    rows = await DeploymentRepository(session).list_for_service(
-        service_id, env=env
-    )
+    rows = await DeploymentRepository(session).list_for_service(service_id, env=env)
     return ok([DeploymentOut.model_validate(r).model_dump(mode="json") for r in rows])
 
 

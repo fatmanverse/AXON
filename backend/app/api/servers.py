@@ -13,7 +13,7 @@ from __future__ import annotations
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.ssh_executor import SSHExecutor, SSHTarget
+from app.adapters.ssh_executor import SSHExecutor
 from app.api.deps import (
     get_current_user,
     get_database,
@@ -30,12 +30,12 @@ from app.core.responses import ok
 from app.core.secrets import SecretStore
 from app.models.audit import AuditResult
 from app.models.server import AccessMode, Server
-from app.models.user import User
 from app.models.task import TaskType
+from app.models.user import User
 from app.schemas.server import ServerCreate, ServerOut, ServerRegisterRequest
 from app.schemas.task import TaskAccepted
-from app.services.audit_service import AuditService
 from app.services.agent_delivery_service import AgentDeliveryService
+from app.services.audit_service import AuditService
 from app.services.environment_repository import EnvironmentRepository
 from app.services.executor_factory import build_executor_for_server
 from app.services.monitoring_bootstrap import MonitoringBootstrapService

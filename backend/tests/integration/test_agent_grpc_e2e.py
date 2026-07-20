@@ -14,7 +14,6 @@ from __future__ import annotations
 import asyncio
 
 import grpc
-import pytest
 
 from app.adapters.agent_gateway import AgentGateway
 from app.grpc_gen import agent_pb2, agent_pb2_grpc
@@ -83,9 +82,7 @@ async def test_end_to_end_command_roundtrip():
         await _wait(lambda: manager.is_online("agent-e2e", now=manager_now()))
 
         # 控制面经 AgentGateway 下发命令,等 result ACK
-        gateway = AgentGateway(
-            manager=manager, agent_id="agent-e2e", ack_timeout=3.0, fence=1
-        )
+        gateway = AgentGateway(manager=manager, agent_id="agent-e2e", ack_timeout=3.0, fence=1)
         result = await gateway.exec("systemctl restart billing")
 
         assert result.succeeded
