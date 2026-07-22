@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
-from app.adapters.ssh_executor import SSHTarget
+from app.adapters.ssh_executor import SSHTarget, build_ssh_connect_kwargs
 from app.core.errors import AppError
 from app.core.secrets import SecretStore
 
@@ -35,7 +35,8 @@ class SshArtifactTransfer:
         self._connector = connector or _default_connector
 
     async def upload(self, local_path: str, remote_path: str) -> None:
-        if not Path(local_path).is_file():
+        path = Path(local_path)
+        if path.is_symlink() or not path.is_file():
             raise AppError(
                 "artifact_file_not_found",
                 "本地制品文件不存在",
@@ -43,20 +44,8 @@ class SshArtifactTransfer:
             )
 
         try:
-            secret = self._secrets.get(self._target.credential_id)
-            kwargs: dict[str, Any] = {
-                "host": self._target.host,
-                "port": self._target.port,
-                "username": self._target.username,
-                "connect_timeout": self._target.connect_timeout,
-                "known_hosts": None,
-            }
-            if self._target.auth_type == "password":
-                kwargs["password"] = secret
-            else:
-                kwargs["client_keys"] = [secret.encode()]
-
-            async with self._connector(**kwargs) as connection:
+            connect_kwargs = build_ssh_connect_kwargs(self._target, self._secrets)
+            async with self._connector(**connect_kwargs) as connection:
                 async with connection.start_sftp_client() as sftp:
                     parent = posixpath.dirname(remote_path)
                     if parent:

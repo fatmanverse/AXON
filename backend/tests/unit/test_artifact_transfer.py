@@ -161,6 +161,27 @@ async def test_upload_missing_local_file_raises_404_before_connecting(tmp_path: 
     assert connector.calls == []
 
 
+async def test_upload_rejects_symlink_before_connecting(tmp_path: Path):
+    artifact = tmp_path / "artifact.tar.gz"
+    artifact.touch()
+    symlink = tmp_path / "artifact-link.tar.gz"
+    symlink.symlink_to(artifact)
+    store, credential_id = _secret_store()
+    connector = FakeConnector(FakeSFTP())
+    transfer = SshArtifactTransfer(
+        SSHTarget("10.0.0.8", 22, "deploy", credential_id),
+        store,
+        connector=connector,
+    )
+
+    with pytest.raises(AppError) as caught:
+        await transfer.upload(str(symlink), "/tmp/artifact.tar.gz")
+
+    assert caught.value.code == "artifact_file_not_found"
+    assert caught.value.status_code == 404
+    assert connector.calls == []
+
+
 async def test_upload_translates_sftp_failure_to_502(tmp_path: Path):
     artifact = tmp_path / "artifact.tar.gz"
     artifact.touch()

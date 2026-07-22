@@ -55,6 +55,26 @@ def _default_connector(**kwargs: Any) -> Any:
     return asyncssh.connect(**kwargs)
 
 
+def build_ssh_connect_kwargs(
+    target: SSHTarget,
+    secrets: SecretStore,
+) -> dict[str, Any]:
+    """构造 AsyncSSH 连接参数，集中维护密码与私钥认证契约。"""
+    secret = secrets.get(target.credential_id)
+    kwargs: dict[str, Any] = {
+        "host": target.host,
+        "port": target.port,
+        "username": target.username,
+        "connect_timeout": target.connect_timeout,
+        "known_hosts": None,
+    }
+    if target.auth_type == "password":
+        kwargs["password"] = secret
+    else:
+        kwargs["client_keys"] = [secret.encode()]
+    return kwargs
+
+
 class SSHExecutor(Executor):
     """经 SSH 在单台服务器上执行动作。"""
 
@@ -70,22 +90,7 @@ class SSHExecutor(Executor):
         self._connector = connector or _default_connector
 
     def _connect(self) -> Any:
-        # 每次建连时从保险箱取机密(私钥或密码),不缓存明文。
-        secret = self._secrets.get(self._target.credential_id)
-        kwargs: dict[str, Any] = {
-            "host": self._target.host,
-            "port": self._target.port,
-            "username": self._target.username,
-            "connect_timeout": self._target.connect_timeout,
-            "known_hosts": None,
-        }
-        # 按认证方式选参:password 走 asyncssh 的 password=,key 走 client_key=。
-        # 二选一——不同时传,避免 asyncssh 认证方式歧义。
-        if self._target.auth_type == "password":
-            kwargs["password"] = secret
-        else:
-            kwargs["client_key"] = secret
-        return self._connector(**kwargs)
+        return self._connector(**build_ssh_connect_kwargs(self._target, self._secrets))
 
     async def exec(self, command: str, *, timeout: float | None = None) -> CommandResult:
         effective_timeout = timeout if timeout is not None else DEFAULT_TIMEOUT
