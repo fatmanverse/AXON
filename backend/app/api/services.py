@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
     get_agent_registry,
+    get_artifact_deployment_service,
     get_current_user,
     get_database,
     get_health_checker,
@@ -478,16 +479,19 @@ async def _start_deploy(
     operator: str,
     health_checker=None,
     rollout_provider=None,
+    artifact_deployer=None,
 ) -> str:
-    """建 deploy task + 写审计 + 调度异步部署编排,返回 task_id。
+    """建 deploy task + 写审计 + 调度异步部署编排，返回 task_id。
 
-    直接部署(dev/staging 或未开审批的 prod)与审批通过后的执行共用此逻辑,
+    CI 模式（body.version）和 artifact 直发模式（body.artifact_id）共用此逻辑，
     保证「批准后执行」与「直接执行」走完全一致的部署路径。
     """
+    # 审计与 task payload 按模式填写
+    deploy_label = body.artifact_id or body.version
     task = await TaskRepository(session).create(
         type=TaskType.DEPLOY,
         target=f"service:{service.id}",
-        payload={"env": service.env, "version": body.version},
+        payload={"env": service.env, "version": deploy_label},
         created_by=operator,
     )
     task_id = task.id
@@ -497,29 +501,40 @@ async def _start_deploy(
         target=f"service:{service.id}",
         env=service.env,
         result=AuditResult.SUCCESS,
-        after={"task_id": task_id, "version": body.version, "strategy": body.strategy.value},
+        after={
+            "task_id": task_id,
+            "version": body.version,
+            "artifact_id": body.artifact_id,
+            "strategy": body.strategy.value,
+        },
         ip=request.client.host if request.client else None,
         ua=request.headers.get("user-agent"),
     )
     deployer = DeploymentService(
         db,
-        adapter_provider=provider,
+        adapter_provider=provider or (lambda _svc: None),
         health_checker=health_checker,
         rollout_provider=rollout_provider,
         auto_rollback_on_health_fail=request.app.state.settings.auto_rollback_on_health_fail,
+        artifact_deployer=artifact_deployer,
     )
     background.add_task(
         deployer.run_deploy,
         task_id=task_id,
         service_id=service.id,
-        request=DeployRequest(version=body.version, strategy=body.strategy, git_sha=body.git_sha),
+        request=DeployRequest(
+            version=body.version,
+            strategy=body.strategy,
+            git_sha=body.git_sha,
+            artifact_id=body.artifact_id,
+        ),
         operator=operator,
     )
     _notify_key_operation(
         request=request,
         background=background,
         service=service,
-        version=body.version,
+        version=deploy_label,
         operator=operator,
         action="部署",
         should_notify=await _env_requires_approval(session, service.env),
@@ -538,35 +553,51 @@ async def deploy_service(
     provider=Depends(get_pipeline_adapter_provider),
     health_checker=Depends(get_health_checker),
     rollout_provider=Depends(get_rollout_provider),
+    artifact_deployer=Depends(get_artifact_deployment_service),
     user: User = Depends(get_current_user),
 ) -> dict:
-    """UI 触发部署(§8.1 模式 A):落 deploy task 与 deployment 记录,异步调 CI。
+    """UI 触发部署(§8.1 模式 A)：落 deploy task 与 deployment 记录，异步执行。
+
+    支持两种模式（互斥，由 DeployRequestBody validator 保证）：
+    - CI 模式（body.version）：触发外部 CI 流水线，需要 provider 配置。
+    - artifact 直发模式（body.artifact_id）：直接把已登记制品送上 runtime，不调 CI。
 
     鉴权按 service.env 判 service:{env}:deploy。task 与审计在请求会话内落库
-    (先于后台任务运行),后台任务另起会话跑 DeploymentService 编排。
+    （先于后台任务运行），后台任务另起会话跑 DeploymentService 编排。
     """
-    if provider is None:
+    # CI 模式才强制要求 provider；artifact 模式不调 CI
+    if body.artifact_id is None and provider is None:
         raise AppError(
             "pipeline_not_configured",
-            "未配置 CI 流水线,无法触发部署",
+            "未配置 CI 流水线，无法触发 CI 部署",
+            status_code=501,
+        )
+
+    # artifact 直发模式首版仅支持 rolling strategy
+    if body.artifact_id is not None and body.strategy.value != "rolling":
+        raise AppError(
+            "artifact_strategy_not_implemented",
+            "artifact 直发首版仅支持 rolling 策略",
             status_code=501,
         )
 
     service = await ServiceRepository(session).get_service(service_id)
     _require_service_permission(user, service, TaskType.DEPLOY)
 
-    # 部署前质量门禁(§7.2):带 git_sha 且策略开启时,存在 critical 拦截(422)。
-    # 拦截也要留痕(§7.2「门禁结果写审计」):记一条 FAILED 审计后再上抛,使"谁在
-    # 什么时候被门禁挡下、挡了几个 critical"可追溯,而非静默 422。
+    # artifact 直发：在后台任务前预检 artifact 归属与类型兼容（fast-fail，门禁用 resolved git_sha）
+    resolved_git_sha = body.git_sha
+    if body.artifact_id is not None:
+        deploy_input = await artifact_deployer.resolve(service_id, body.artifact_id)
+        resolved_git_sha = resolved_git_sha or deploy_input.git_sha
+
+    # 部署前质量门禁(§7.2)：带 git_sha 且策略开启时，存在 critical 拦截(422)。
     try:
         await check_quality_gate(
             ScanResultRepository(session),
-            git_sha=body.git_sha,
+            git_sha=resolved_git_sha,
             block_on_critical=request.app.state.settings.deploy_block_on_critical,
         )
     except QualityGateBlocked as blocked:
-        # 审计需独立会话提交:请求会话在上抛 422 时整体回滚,写在其中的审计会随之
-        # 丢失。故另起一个会话写门禁拦截审计并提交,再上抛拦截异常。
         async with db.session() as audit_session:
             await AuditService(audit_session).record(
                 actor=user.username,
@@ -575,8 +606,9 @@ async def deploy_service(
                 env=service.env,
                 result=AuditResult.FAILED,
                 after={
-                    "git_sha": body.git_sha,
+                    "git_sha": resolved_git_sha,
                     "version": body.version,
+                    "artifact_id": body.artifact_id,
                     "blocking": blocked.blocking,
                     "reason": blocked.message,
                 },
@@ -585,13 +617,13 @@ async def deploy_service(
             )
         raise
 
-    # 生产审批流(§10.2/§13):prod 高危操作在开关开启时不直接执行,先落 pending
-    # 审批,返回审批 id;具 approval 权限者批准后才建 task 执行(见 approvals API)。
+    # 生产审批流(§10.2/§13)
     approval_id = await _maybe_create_prod_approval(
         service=service,
         action=ApprovalAction.DEPLOY,
         payload={
             "version": body.version,
+            "artifact_id": body.artifact_id,
             "strategy": body.strategy.value,
             "git_sha": body.git_sha,
         },
@@ -613,6 +645,7 @@ async def deploy_service(
         operator=user.username,
         health_checker=health_checker,
         rollout_provider=rollout_provider,
+        artifact_deployer=artifact_deployer if body.artifact_id else None,
     )
     accepted = TaskAccepted(task_id=task_id, status=TaskStatus.PENDING)
     return ok(accepted.model_dump())

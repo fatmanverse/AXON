@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
     get_agent_registry,
+    get_artifact_deployment_service,
     get_current_user,
     get_database,
     get_health_checker,
@@ -89,6 +90,7 @@ async def approve(
     provider=Depends(get_pipeline_adapter_provider),
     health_checker=Depends(get_health_checker),
     rollout_provider=Depends(get_rollout_provider),
+    artifact_deployer=Depends(get_artifact_deployment_service),
     secrets: SecretStore = Depends(get_secret_store),
     connector=Depends(get_ssh_connector),
     k8s_api_factory=Depends(get_k8s_api_factory),
@@ -115,11 +117,18 @@ async def approve(
             f"暂不支持批准执行的动作: {approval.action.value}",
             status_code=501,
         )
-    # deploy/rollback 需 CI 适配器;delete 走 SSH/agent 生命周期,不需要 provider。
-    if approval.action in (ApprovalAction.DEPLOY, ApprovalAction.ROLLBACK) and provider is None:
-        raise AppError("pipeline_not_configured", "未配置 CI 流水线,无法执行", status_code=501)
 
     payload = approval.payload or {}
+    artifact_id_from_payload = payload.get("artifact_id")
+
+    # CI 模式需要 provider；artifact 直发模式不需要
+    if (
+        approval.action in (ApprovalAction.DEPLOY, ApprovalAction.ROLLBACK)
+        and provider is None
+        and artifact_id_from_payload is None
+    ):
+        raise AppError("pipeline_not_configured", "未配置 CI 流水线,无法执行", status_code=501)
+
     task = await TaskRepository(session).create(
         type=task_type,
         target=f"service:{approval.service_id}",
@@ -144,7 +153,6 @@ async def approve(
 
     operator = approval.requested_by or user.username
     if approval.action == ApprovalAction.DELETE:
-        # delete 经生命周期服务(SSH/agent/k8s 多态),与直接删除同一路径。
         lifecycle = LifecycleService(
             db,
             secrets,
@@ -161,10 +169,11 @@ async def approve(
     else:
         deployer = DeploymentService(
             db,
-            adapter_provider=provider,
+            adapter_provider=provider or (lambda _svc: None),
             health_checker=health_checker,
             rollout_provider=rollout_provider,
             auto_rollback_on_health_fail=request.app.state.settings.auto_rollback_on_health_fail,
+            artifact_deployer=artifact_deployer if artifact_id_from_payload else None,
         )
         if approval.action == ApprovalAction.ROLLBACK:
             background.add_task(
@@ -180,9 +189,10 @@ async def approve(
                 task_id=task_id,
                 service_id=approval.service_id,
                 request=DeployRequest(
-                    version=payload.get("version", ""),
+                    version=payload.get("version"),
                     strategy=strategy,
                     git_sha=payload.get("git_sha"),
+                    artifact_id=artifact_id_from_payload,
                 ),
                 operator=operator,
             )

@@ -94,6 +94,24 @@ def get_rollout_provider(request: Request):
     )
 
 
+def get_artifact_deployment_service(request: Request):
+    """artifact 直接部署服务(artifact 直发 Task 5)。按需组装 ArtifactDeploymentService,
+    注入 db/secrets/connector/agent_registry/k8s_api_factory。测试可经
+    app.state.artifact_deployment_service 覆写为 fake。"""
+    existing = getattr(request.app.state, "artifact_deployment_service", None)
+    if existing is not None:
+        return existing
+    from app.services.artifact_deployment_service import ArtifactDeploymentService
+
+    return ArtifactDeploymentService(
+        request.app.state.db,
+        request.app.state.secret_store,
+        connector=getattr(request.app.state, "ssh_connector", None),
+        agent_registry=getattr(request.app.state, "agent_gateway_registry", None),
+        k8s_api_factory=getattr(request.app.state, "k8s_api_factory", None),
+    )
+
+
 async def get_current_claims(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     settings: Settings = Depends(get_settings),
