@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import Any
 
 from app.adapters.pipeline import PipelineAdapter
 from app.core.db import Database
@@ -46,11 +47,18 @@ RolloutProvider = Callable[[Service], Awaitable[RolloutContext | None]]
 
 @dataclass(frozen=True)
 class DeployRequest:
-    """一次部署请求的参数(§15.2 body:{version, strategy, env})。env 取自 service。"""
+    """一次部署请求的参数(§15.2 body:{version, strategy, env})。env 取自 service。
 
-    version: str
+    version 与 artifact_id 二选一：
+    - CI 模式：传 version，触发外部 CI 流水线（现有路径）。
+    - artifact 直发模式：传 artifact_id，由 ArtifactDeploymentService 直接
+      把制品送上 runtime，不调 CI，不调 release_strategy。
+    """
+
+    version: str | None = None
     strategy: DeploymentStrategy = DeploymentStrategy.ROLLING
     git_sha: str | None = None
+    artifact_id: str | None = None
 
 
 class DeploymentService:
@@ -64,6 +72,7 @@ class DeploymentService:
         health_checker: HealthChecker | None = None,
         rollout_provider: RolloutProvider | None = None,
         auto_rollback_on_health_fail: bool = False,
+        artifact_deployer: Any | None = None,
     ) -> None:
         self._db = db
         self._adapter_provider = adapter_provider
@@ -75,6 +84,9 @@ class DeploymentService:
         # 发布后健康检查失败自动回滚(§11.2):默认关闭。开启后健康检查未通过时,
         # 除标 FAILED 外再自动重部署上一版成功制品(留 rolled_back 闭环)。
         self._auto_rollback_on_health_fail = auto_rollback_on_health_fail
+        # artifact 直接部署服务(artifact 直发 Task 4):注入后支持 artifact 模式
+        # 部署。未注入时 artifact 请求抛错,保持原有 CI 路径不变。
+        self._artifact_deployer = artifact_deployer
 
     async def run_deploy(
         self,
@@ -127,8 +139,10 @@ class DeploymentService:
 
         async with self._db.session() as session:
             await DeploymentRepository(session).mark_status(deployment_id, DeploymentStatus.SUCCESS)
+            # artifact 模式 version 从制品派生，CI 模式来自请求
+            version_label = getattr(request, "artifact_id", None) or request.version
             await TaskRepository(session).mark_result(
-                task_id, TaskStatus.SUCCESS, result={"version": request.version}
+                task_id, TaskStatus.SUCCESS, result={"version": version_label}
             )
 
     async def _try_auto_rollback(
@@ -162,11 +176,18 @@ class DeploymentService:
     ) -> tuple[str, dict | None]:
         """加载服务→落 running deployment→触发 CI。
 
+        artifact 模式（request.artifact_id 存在）分派到 _execute_artifact；
+        CI 模式（version 存在）走现有 CI 触发路径。
+
         CI 触发成功后 deployment 保持 RUNNING(不落终态),由 run_deploy 依据发布后
         健康检查再落 SUCCESS/FAILED——避免先落 SUCCESS 再翻 FAILED 的非法状态流转。
         返回 (deployment_id, 该 service 的 health_check 配置);无配置则第二项为 None。
         """
-        # 加载服务并取出编排所需字段(避免会话关闭后惰性访问)
+        # artifact 直接部署分支：不触发 CI，直接调 ArtifactDeploymentService
+        if request.artifact_id is not None:
+            return await self._execute_artifact(service_id, request, operator)
+
+        # CI 模式分支（既有路径）：加载服务并取出编排所需字段
         async with self._db.session() as session:
             service = await ServiceRepository(session).get_service(service_id)
             env = service.env
@@ -238,6 +259,58 @@ class DeploymentService:
                         deployment_id, DeploymentStatus.FAILED
                     )
                 raise
+
+        return (deployment_id, health_check)
+
+    async def _execute_artifact(
+        self, service_id: str, request: DeployRequest, operator: str
+    ) -> tuple[str, dict | None]:
+        """artifact 直接部署路径：resolve metadata → 落 running deployment → 调 deployer。
+
+        不触发 CI，不调 release_strategy（artifact 直发已含 runtime 动作）。
+        artifact_id / uri / version / git_sha 全部从 deployer.deploy() 返回值派生。
+        """
+        if self._artifact_deployer is None:
+            raise AppError(
+                "artifact_deployer_not_configured",
+                "未配置 artifact 部署服务，无法执行 artifact 直接部署",
+                status_code=501,
+            )
+
+        # 调 ArtifactDeploymentService.deploy 执行 artifact→runtime 动作
+        deploy_input = await self._artifact_deployer.deploy(service_id, request.artifact_id)
+
+        # 加载 service 元数据（env / health_check / previous）
+        async with self._db.session() as session:
+            service = await ServiceRepository(session).get_service(service_id)
+            env = service.env
+            health_check = service.health_check
+            previous = await DeploymentRepository(session).latest_successful(service_id, env=env)
+            previous_id = previous.id if previous else None
+            # git_sha 用于扫描关联：优先 deploy_input，否则取 request
+            git_sha = deploy_input.git_sha or request.git_sha
+            scan_result_id = None
+            if git_sha:
+                scans = await ScanResultRepository(session).list_for_git_sha(git_sha)
+                if scans:
+                    scan_result_id = scans[0].id
+
+        # 落一条 running deployment（artifact 模式带 artifact_id / uri）
+        async with self._db.session() as session:
+            deployment = await DeploymentRepository(session).create(
+                service_id=service_id,
+                env=env,
+                source=DeploymentSource.UI_TRIGGERED,
+                strategy=request.strategy,
+                version=deploy_input.version,
+                artifact=deploy_input.uri,
+                artifact_id=deploy_input.artifact_id,
+                git_sha=git_sha,
+                operator=operator,
+                previous_deployment_id=previous_id,
+                scan_result_id=scan_result_id,
+            )
+            deployment_id = deployment.id
 
         return (deployment_id, health_check)
 

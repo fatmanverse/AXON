@@ -283,3 +283,122 @@ async def test_rollout_strategy_failure_marks_deploy_failed(db):
         deployments = await DeploymentRepository(session).list_for_service(service_id, env="prod")
     assert task.status == TaskStatus.FAILED
     assert deployments[0].status == DeploymentStatus.FAILED
+
+
+# ── artifact 直接部署测试 ─────────────────────────────────────────────────────
+
+
+class _FakeArtifactDeployer:
+    """记录 deploy 调用；可配置失败。"""
+    def __init__(self, *, artifact_id: str, version: str = "v1.0.0",
+                 uri: str = "/tmp/app.tar.gz", fail: bool = False) -> None:
+        from app.models.artifact import ArtifactRegistryType
+        from app.services.artifact_deployment_service import ArtifactDeployInput
+        self._input = ArtifactDeployInput(
+            service_id="",  # filled in test
+            artifact_id=artifact_id,
+            version=version,
+            git_sha=None,
+            uri=uri,
+            registry_type=ArtifactRegistryType.GENERIC,
+        )
+        self._fail = fail
+        self.deploy_calls: list[tuple[str, str]] = []
+
+    async def deploy(self, service_id: str, artifact_id: str):
+        self.deploy_calls.append((service_id, artifact_id))
+        if self._fail:
+            raise RuntimeError("runtime error")
+        from dataclasses import replace
+        return replace(self._input, service_id=service_id)
+
+
+async def test_artifact_deploy_success_saves_artifact_id(db):
+    """artifact 模式：deployment 保存 artifact_id/uri/version；CI 未调用。"""
+    from app.models.deployment import DeploymentStatus
+    from app.models.task import TaskStatus
+
+    service_id = await _seed_service(db, env=ServiceEnvironment.DEV)
+    task_id = await _make_task(db, service_id)
+    fake_deployer = _FakeArtifactDeployer(
+        artifact_id="a" * 32, version="v1.0.0", uri="/tmp/app-v1.0.0.tar.gz"
+    )
+    ci_adapter = _FakeAdapter()
+    svc = DeploymentService(
+        db,
+        adapter_provider=lambda _: ci_adapter,
+        artifact_deployer=fake_deployer,
+    )
+
+    await svc.run_deploy(
+        task_id=task_id,
+        service_id=service_id,
+        request=DeployRequest(artifact_id="a" * 32, strategy=DeploymentStrategy.ROLLING),
+        operator="bob",
+    )
+
+    # CI adapter 不应被触发
+    assert ci_adapter.triggered == []
+
+    # artifact_deployer.deploy 被调用一次
+    assert fake_deployer.deploy_calls == [(service_id, "a" * 32)]
+
+    # task 落 success
+    async with db.session() as session:
+        task = await TaskRepository(session).get(task_id)
+    assert task.status == TaskStatus.SUCCESS
+
+    # deployment 有 artifact_id
+    async with db.session() as session:
+        from app.services.deployment_repository import DeploymentRepository
+        deps = await DeploymentRepository(session).list_for_service(service_id)
+    assert len(deps) == 1
+    assert deps[0].artifact_id == "a" * 32
+    assert deps[0].status == DeploymentStatus.SUCCESS
+
+
+async def test_artifact_deploy_runtime_failure_marks_failed(db):
+    """artifact runtime 失败 → deployment + task 均落 failed。"""
+    from app.models.task import TaskStatus
+
+    service_id = await _seed_service(db, env=ServiceEnvironment.DEV)
+    task_id = await _make_task(db, service_id)
+    fake_deployer = _FakeArtifactDeployer(artifact_id="b" * 32, fail=True)
+    svc = DeploymentService(
+        db,
+        adapter_provider=lambda _: _FakeAdapter(),
+        artifact_deployer=fake_deployer,
+    )
+
+    await svc.run_deploy(
+        task_id=task_id,
+        service_id=service_id,
+        request=DeployRequest(artifact_id="b" * 32),
+        operator="alice",
+    )
+
+    async with db.session() as session:
+        task = await TaskRepository(session).get(task_id)
+    assert task.status == TaskStatus.FAILED
+
+
+async def test_ci_deploy_still_works_without_artifact_id(db):
+    """旧 CI 模式（version）不受 artifact 分支影响。"""
+    from app.models.task import TaskStatus
+
+    service_id = await _seed_service(db)
+    task_id = await _make_task(db, service_id)
+    adapter = _FakeAdapter(run_id="ci-run-99")
+
+    svc = DeploymentService(db, adapter_provider=lambda _: adapter)
+    await svc.run_deploy(
+        task_id=task_id,
+        service_id=service_id,
+        request=DeployRequest(version="v2.0.0"),
+        operator="alice",
+    )
+
+    assert len(adapter.triggered) == 1
+    async with db.session() as session:
+        task = await TaskRepository(session).get(task_id)
+    assert task.status == TaskStatus.SUCCESS
