@@ -114,6 +114,13 @@ class ArtifactRepository:
         await self._session.flush()
         return artifact
 
+    async def get_artifact(self, artifact_id: str) -> Artifact:
+        """按 id 取制品;不存在抛 404。供 artifact 直接部署路径加载元数据。"""
+        artifact = await self._session.get(Artifact, artifact_id)
+        if artifact is None:
+            raise AppError("artifact_not_found", "制品不存在", status_code=404)
+        return artifact
+
     async def list_for_service(self, service_id: str, *, limit: int = 50) -> Sequence[Artifact]:
         stmt = (
             select(Artifact)

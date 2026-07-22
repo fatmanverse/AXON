@@ -128,3 +128,23 @@ async def test_latest_successful_none_when_no_success(db):
     async with db.session() as session:
         latest = await DeploymentRepository(session).latest_successful("svc1", env="prod")
     assert latest is None
+
+
+async def test_create_deployment_with_artifact_id(db):
+    """artifact 直发路径:create 时传入 artifact_id 应持久化到记录。"""
+    async with db.session() as session:
+        repo = DeploymentRepository(session)
+        dep = await repo.create(
+            service_id="svc1",
+            env="dev",
+            source=DeploymentSource.UI_TRIGGERED,
+            version="v1.0.0",
+            artifact="/tmp/app-1.0.0.tar.gz",
+            artifact_id="abcdef01234567890123456789012345",
+        )
+        dep_id = dep.id
+
+    async with db.session() as session:
+        fetched = await DeploymentRepository(session).get(dep_id)
+    assert fetched.artifact_id == "abcdef01234567890123456789012345"
+    assert fetched.artifact == "/tmp/app-1.0.0.tar.gz"

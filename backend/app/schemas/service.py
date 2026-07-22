@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.deployment import DeploymentStrategy
 from app.models.service import ObservedStatus, ReloadMode, Runtime
@@ -50,11 +50,25 @@ class ServiceOut(BaseModel):
 
 
 class DeployRequestBody(BaseModel):
-    """UI 触发部署入参(§15.2 body:{version, strategy})。env 取自服务本身,不由前端传。"""
+    """UI 触发部署入参。version 与 artifact_id 必须且只能提供一个：
+    - CI 模式：传 version（原有路径，触发外部 CI 流水线）。
+    - artifact 直发模式：传 artifact_id（直接把已登记制品送上 runtime）。
+    env 取自服务本身，不由前端传。
+    """
 
-    version: str = Field(min_length=1, max_length=128)
+    version: str | None = Field(default=None, min_length=1, max_length=128)
+    artifact_id: str | None = Field(default=None, min_length=32, max_length=32)
     strategy: DeploymentStrategy = DeploymentStrategy.ROLLING
     git_sha: str | None = Field(default=None, max_length=64)
+
+    @model_validator(mode="after")
+    def require_version_or_artifact(self) -> "DeployRequestBody":
+        """version 与 artifact_id 必须且只能提供一个；两者缺失或同时存在均报错。"""
+        has_version = bool(self.version)
+        has_artifact = self.artifact_id is not None
+        if has_version == has_artifact:
+            raise ValueError("version 与 artifact_id 必须且只能提供一个")
+        return self
 
 
 class PromoteRequestBody(BaseModel):

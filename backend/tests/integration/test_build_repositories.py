@@ -139,3 +139,32 @@ async def test_create_artifact_and_list_for_service(db):
         rows = await repo.list_for_service("svc1")
         assert len(rows) == 1
         assert rows[0].uri.endswith("app-1.0.0.tar.gz")
+
+
+async def test_get_artifact_found(db):
+    async with db.session() as session:
+        repo = ArtifactRepository(session)
+        registry = await repo.ensure_default_registry(ArtifactRegistryType.GENERIC)
+        artifact = await repo.create_artifact(
+            registry_id=registry.id,
+            service_id="svc1",
+            name="app",
+            version="2.0.0",
+            uri="/tmp/app-2.0.0.tar.gz",
+        )
+        artifact_id = artifact.id
+
+    async with db.session() as session:
+        fetched = await ArtifactRepository(session).get_artifact(artifact_id)
+    assert fetched.id == artifact_id
+    assert fetched.service_id == "svc1"
+
+
+async def test_get_artifact_missing_raises_404(db):
+    from app.core.errors import AppError
+
+    async with db.session() as session:
+        repo = ArtifactRepository(session)
+        with pytest.raises(AppError) as exc_info:
+            await repo.get_artifact("00000000000000000000000000000000")
+    assert exc_info.value.status_code == 404

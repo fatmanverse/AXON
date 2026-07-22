@@ -16,6 +16,9 @@ class DeploymentOut(BaseModel):
     git_sha: str | None = None
     version: str | None = None
     artifact: str | None = None
+    # 控制面自建构建链路:记录本次部署消费的制品 id(软引用 artifacts.id)。
+    # 旧 CI 部署路径此字段为 None。
+    artifact_id: str | None = None
     strategy: DeploymentStrategy
     source: DeploymentSource
     pipeline_id: str | None = None
