@@ -16,6 +16,7 @@ import {
   Card,
   Descriptions,
   Empty,
+  Modal,
   Result,
   Segmented,
   Select,
@@ -28,7 +29,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/client";
-import { listServices } from "@/api/services";
+import { listServices, type Service } from "@/api/services";
 import {
   type Artifact,
   type Build,
@@ -38,6 +39,7 @@ import {
   listBuilds,
   triggerBuild,
 } from "@/api/builds";
+import { deployService, isPendingApproval } from "@/api/deployments";
 import { pollTaskUntilDone } from "@/api/taskPolling";
 import { DetailModal } from "@/components/DetailModal";
 import { FormModal } from "@/components/FormModal";
@@ -259,11 +261,68 @@ function BuildsTab({ serviceId }: { serviceId: string }): React.ReactElement {
   );
 }
 
-function ArtifactsTab({ serviceId }: { serviceId: string }): React.ReactElement {
+function ArtifactsTab({ service }: { service: Service }): React.ReactElement {
+  const serviceId = service.id;
+  const queryClient = useQueryClient();
+  const [deployingId, setDeployingId] = useState<string | null>(null);
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["artifacts", serviceId],
     queryFn: () => listArtifacts(serviceId),
   });
+
+  const deployArtifact = async (artifact: Artifact): Promise<void> => {
+    setDeployingId(artifact.id);
+    const hide = message.loading("制品部署触发中…", 0);
+    try {
+      const result = await deployService(service.id, {
+        artifact_id: artifact.id,
+        strategy: "rolling",
+      });
+      if (isPendingApproval(result)) {
+        hide();
+        message.info("该操作为生产高危变更,已提交审批,待审批通过后执行");
+        return;
+      }
+      const task = await pollTaskUntilDone(result.task_id);
+      hide();
+      if (task.status === "success") {
+        message.success("制品部署成功");
+      } else if (task.status === "failed") {
+        message.error(`制品部署失败:${task.error ?? "未知错误"}`);
+      } else {
+        message.warning("制品部署状态未知,请稍后核对");
+      }
+      void queryClient.invalidateQueries({ queryKey: ["artifacts", serviceId] });
+      void queryClient.invalidateQueries({ queryKey: ["deployments", serviceId] });
+    } catch (err) {
+      hide();
+      message.error(err instanceof ApiError ? err.message : "制品部署请求失败");
+    } finally {
+      setDeployingId(null);
+    }
+  };
+
+  const confirmDeploy = (artifact: Artifact): void => {
+    Modal.confirm({
+      title: "确认部署构建产物",
+      content: (
+        <Descriptions column={1} size="small">
+          <Descriptions.Item label="服务">
+            {service.name}({service.env})
+          </Descriptions.Item>
+          <Descriptions.Item label="运行时">{service.runtime}</Descriptions.Item>
+          <Descriptions.Item label="制品">{artifact.name}</Descriptions.Item>
+          <Descriptions.Item label="版本">{artifact.version ?? "-"}</Descriptions.Item>
+          <Descriptions.Item label="地址">
+            <code>{artifact.uri}</code>
+          </Descriptions.Item>
+        </Descriptions>
+      ),
+      okText: "部署",
+      cancelText: "取消",
+      onOk: () => deployArtifact(artifact),
+    });
+  };
 
   const columns: ColumnsType<Artifact> = [
     { title: "名称", dataIndex: "name", key: "name" },
@@ -293,6 +352,21 @@ function ArtifactsTab({ serviceId }: { serviceId: string }): React.ReactElement 
       key: "size_bytes",
       width: 90,
       render: (b: number | null) => formatSize(b),
+    },
+    {
+      title: "操作",
+      key: "action",
+      width: 80,
+      render: (_, artifact) => (
+        <Button
+          size="small"
+          type="link"
+          loading={deployingId === artifact.id}
+          onClick={() => confirmDeploy(artifact)}
+        >
+          部署
+        </Button>
+      ),
     },
   ];
 
@@ -381,7 +455,7 @@ export function BuildsPage(): React.ReactElement {
           {tab === "builds" ? (
             <BuildsTab serviceId={selected.id} />
           ) : (
-            <ArtifactsTab serviceId={selected.id} />
+            <ArtifactsTab service={selected} />
           )}
         </>
       ) : (

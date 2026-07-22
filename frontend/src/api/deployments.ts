@@ -57,9 +57,10 @@ export interface ConfigDelivery {
 }
 
 export interface DeployBody {
-  version: string;
+  version?: string;
   strategy?: DeploymentStrategy;
   git_sha?: string;
+  artifact_id?: string;
 }
 
 /**
