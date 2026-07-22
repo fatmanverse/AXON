@@ -1,0 +1,7 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "requestedOutcome": "从构建页选择明确 artifact，并真实部署到所属 service 的 runtime。",
+  "scope": "backend artifact contract, transfer, runtime execution, deployment orchestration, API governance, frontend entry, generated contract and operations docs",
+  "changeKinds": ["contract", "architecture", "behavior", "verification"],
+  "riskHints": ["systemd SSH/SFTP", "partial multi-placement deployment", "CI compatibility", "approval and quality gate preservation"]
+}

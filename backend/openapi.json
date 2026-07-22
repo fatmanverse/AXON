@@ -236,8 +236,21 @@
         "type": "object"
       },
       "DeployRequestBody": {
-        "description": "UI 触发部署入参(§15.2 body:{version, strategy})。env 取自服务本身,不由前端传。",
+        "description": "UI 触发部署入参。version 走 CI,artifact_id 走制品直发；env 取自服务本身。",
         "properties": {
+          "artifact_id": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "minLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Id"
+          },
           "git_sha": {
             "anyOf": [
               {
@@ -255,15 +268,18 @@
             "default": "rolling"
           },
           "version": {
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "Version",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
           }
         },
-        "required": [
-          "version"
-        ],
         "title": "DeployRequestBody",
         "type": "object"
       },

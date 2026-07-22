@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-07-20-artifact-direct-deployment",
+  "currentTodo": "final work-record and branch handoff",
+  "completedTodos": ["setup", "Task 1", "Task 2", "Task 3", "Task 4", "Task 5", "Task 6", "Task 7"],
+  "activeSlice": "completion evidence, ADR/baseline sync and final diff review",
+  "evidenceRefs": ["docs/aegis/work/2026-07-20-artifact-direct-deployment/90-evidence.md"],
+  "blockedOn": null,
+  "nextStep": "commit Task 7 records and present verified handoff",
+  "updatedAt": "2026-07-22"
+}

@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "affectedLayers": ["backend schema/repository/service/API/approval/adapter", "frontend API/page", "generated contract", "operations docs"],
+  "owners": ["ArtifactDeploymentService", "DeploymentService", "runtime adapters", "ArtifactTransfer"],
+  "invariants": ["artifact identity/type/URI has one source of truth", "CI requests remain compatible", "unsupported runtime/strategy fails explicitly"],
+  "compatBoundary": "Requests without artifact_id continue through CI; existing approval, quality gate, task and deployment contracts remain compatible.",
+  "nonGoals": ["cross-service or cross-environment direct deploy", "automatic latest artifact selection", "Agent systemd upload", "advanced direct strategies", "router decomposition"]
+}

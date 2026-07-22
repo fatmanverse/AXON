@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "baselineRefs": [
+    "docs/aegis/specs/2026-07-20-artifact-direct-deployment-design.md",
+    "docs/aegis/plans/2026-07-20-artifact-direct-deployment.md",
+    "docs/aegis/baseline/2026-07-22-artifact-direct-deployment-baseline.md"
+  ],
+  "impactStatement": "docs/aegis/work/2026-07-20-artifact-direct-deployment/impact-statement-draft.json",
+  "compatPlan": "Requests without artifact_id continue through CI; existing approval, quality gate, task and deployment contracts remain compatible.",
+  "retirementPlan": "old client_key path deleted; generic Executor.deploy retained only as documented compatibility",
+  "evidenceBundle": [
+    "docs/aegis/work/2026-07-20-artifact-direct-deployment/evidence-bundle-draft.json"
+  ]
+}

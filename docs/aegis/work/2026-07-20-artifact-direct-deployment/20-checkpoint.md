@@ -2,12 +2,12 @@
 
 ## TodoCheckpointDraft
 
-- Current todo: Task 3 — Implement ArtifactDeploymentService Runtime Owner。
-- Completed todos: setup；Task 1 implementation + reviews；Task 2 implementation + review remediation + reviews。
-- Active slice: artifact resolve、runtime compatibility、placement execution、systemd transfer lifecycle。
-- Evidence refs: baseline；Task 1 commit `a237df7`；Task 2 commits `fd7f9a7`、`f080a2f`、`f9043ef`、`44176c7`；Task 2 targeted 32 tests、Ruff、Black、diff check passed；spec and quality self-review approved after subagent interface failure and user-approved main-agent continuation。
+- Current todo: final work-record and branch handoff。
+- Completed todos: setup；Tasks 1-7 implementation、spec reviews、quality reviews、contract/docs and regression verification。
+- Active slice: completion evidence、ADR/baseline sync、final diff review。
+- Evidence refs: baseline；commits through Task 6；Task 7 targeted 60 tests；backend 596 regression tests；frontend 66 tests + lint/build；Ruff/Black/diff checks；ADR-0001 and 2026-07-22 baseline snapshot。
 - Blocked on: none。
-- Next step: strict-TDD Task 3 integration tests, then minimal ArtifactDeploymentService implementation。
+- Next step: commit Task 7 records and present verified handoff；user pushes branch to GitHub。
 
 ## ResumeStateHint
 
@@ -18,8 +18,8 @@
 
 ## DriftCheckDraft
 
-- Original intent served: yes；Task 1 established artifact contract，Task 2 established real SSH/SFTP transfer。
+- Original intent served: yes；explicit artifact now reaches systemd、Docker and Kubernetes through governed deployment flow and BuildsPage action。
 - Compatibility boundary held: yes；old CI schema remains valid。
-- New owner/fallback introduced: shared SSH connect kwargs helper is the canonical auth owner；no fallback introduced。
-- Retirement track explicit: yes；old `client_key` and duplicated authentication branches removed。
-- Decision: `continue`。
+- New owner/fallback introduced: `ArtifactDeploymentService` and narrow `ArtifactTransfer` are approved owners；no CI/runtime fallback introduced。
+- Retirement track explicit: yes；old `client_key` and duplicated authentication branches removed；generic `Executor.deploy()` retained only as documented interface compatibility。
+- Decision: `continue` to verified branch handoff；method-pack records do not grant completion authority。

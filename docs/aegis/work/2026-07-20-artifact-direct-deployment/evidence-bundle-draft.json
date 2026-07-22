@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "artifact-direct-deployment-final-verification",
+  "type": "EvidenceBundleDraft",
+  "source": "artifact-direct-deployment final verification",
+  "summary": "Backend 596 regression tests, frontend 66 tests plus lint/build, static checks and generated contract review passed.",
+  "verifier": "main agent verification commands recorded in 90-evidence.md"
+}

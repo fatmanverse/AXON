@@ -953,15 +953,17 @@ export interface components {
         };
         /**
          * DeployRequestBody
-         * @description UI 触发部署入参(§15.2 body:{version, strategy})。env 取自服务本身,不由前端传。
+         * @description UI 触发部署入参。version 走 CI,artifact_id 走制品直发；env 取自服务本身。
          */
         DeployRequestBody: {
+            /** Artifact Id */
+            artifact_id?: string | null;
             /** Git Sha */
             git_sha?: string | null;
             /** @default rolling */
             strategy: components["schemas"]["DeploymentStrategy"];
             /** Version */
-            version: string;
+            version?: string | null;
         };
         /**
          * DeploymentStrategy
