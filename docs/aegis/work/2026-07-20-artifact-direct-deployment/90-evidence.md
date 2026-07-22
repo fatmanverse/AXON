@@ -1,5 +1,13 @@
 # Artifact Direct Deployment — Evidence
 
+## Task 2 — SSH/SFTP Artifact Transfer
+
+- Commits: `fd7f9a7`, `f080a2f`, `f9043ef`, `44176c7`。
+- RED: AsyncSSH 2.24 raised `TypeError: unexpected keyword argument 'client_key'`; SSH executor `client_keys` assertion failed; symlink upload did not raise。
+- GREEN: `PYTHONPATH="$PWD/backend" backend/.venv/bin/python -m pytest backend/tests/unit/test_artifact_transfer.py backend/tests/unit/test_ssh_executor.py backend/tests/unit/test_executor.py -q` → 32 passed。
+- Static: Ruff passed；Black check passed；`git diff --check` passed。
+- Retirement: SSH executor and artifact transfer now share `build_ssh_connect_kwargs`; no legacy `client_key` remains in the SSH adapter path；symlink artifacts are rejected before connection。
+
 ## Baseline
 
 - Isolated branch created from `0461445`。

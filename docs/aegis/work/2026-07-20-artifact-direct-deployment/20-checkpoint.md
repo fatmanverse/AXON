@@ -2,12 +2,12 @@
 
 ## TodoCheckpointDraft
 
-- Current todo: Task 2 — Add Narrow SSH/SFTP Artifact Transfer。
-- Completed todos: setup；Task 1 implementation + spec review + quality review。
-- Active slice: ArtifactTransfer protocol、SSH/SFTP implementation、executor factory target reuse。
-- Evidence refs: baseline；Task 1 commit `a237df7`；23 target tests + 17 CI regression passed；both reviews approved。
+- Current todo: Task 3 — Implement ArtifactDeploymentService Runtime Owner。
+- Completed todos: setup；Task 1 implementation + reviews；Task 2 implementation + review remediation + reviews。
+- Active slice: artifact resolve、runtime compatibility、placement execution、systemd transfer lifecycle。
+- Evidence refs: baseline；Task 1 commit `a237df7`；Task 2 commits `fd7f9a7`、`f080a2f`、`f9043ef`、`44176c7`；Task 2 targeted 32 tests、Ruff、Black、diff check passed；spec and quality self-review approved after subagent interface failure and user-approved main-agent continuation。
 - Blocked on: none。
-- Next step: dispatch fresh Task 2 implementer with transfer-only boundary。
+- Next step: strict-TDD Task 3 integration tests, then minimal ArtifactDeploymentService implementation。
 
 ## ResumeStateHint
 
@@ -18,8 +18,8 @@
 
 ## DriftCheckDraft
 
-- Original intent served: yes；Task 1 established approved artifact contract。
+- Original intent served: yes；Task 1 established artifact contract，Task 2 established real SSH/SFTP transfer。
 - Compatibility boundary held: yes；old CI schema remains valid。
-- New owner/fallback introduced: no；repository methods stay canonical。
-- Retirement track explicit: yes，plan retains Executor.deploy review trigger。
+- New owner/fallback introduced: shared SSH connect kwargs helper is the canonical auth owner；no fallback introduced。
+- Retirement track explicit: yes；old `client_key` and duplicated authentication branches removed。
 - Decision: `continue`。
