@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
     get_agent_registry,
+    get_artifact_deployment_service,
     get_current_user,
     get_database,
     get_health_checker,
@@ -33,6 +34,7 @@ from app.core.responses import ok
 from app.core.secrets import SecretStore
 from app.models.approval import ApprovalAction
 from app.models.audit import AuditResult
+from app.models.deployment import DeploymentStrategy
 from app.models.service import Runtime, Service
 from app.models.task import TaskStatus, TaskType
 from app.models.user import User
@@ -51,6 +53,7 @@ from app.schemas.service_config import (
 )
 from app.schemas.task import TaskAccepted
 from app.services.approval_repository import ApprovalRepository
+from app.services.artifact_deployment_service import ArtifactDeployInput
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
 from app.services.config_delivery_repository import ConfigDeliveryRepository
@@ -475,6 +478,7 @@ async def _start_deploy(
     session: AsyncSession,
     db: Database,
     provider,
+    artifact_deployer,
     operator: str,
     health_checker=None,
     rollout_provider=None,
@@ -487,7 +491,11 @@ async def _start_deploy(
     task = await TaskRepository(session).create(
         type=TaskType.DEPLOY,
         target=f"service:{service.id}",
-        payload={"env": service.env, "version": body.version},
+        payload={
+            "env": service.env,
+            "version": body.version,
+            "artifact_id": body.artifact_id,
+        },
         created_by=operator,
     )
     task_id = task.id
@@ -497,13 +505,20 @@ async def _start_deploy(
         target=f"service:{service.id}",
         env=service.env,
         result=AuditResult.SUCCESS,
-        after={"task_id": task_id, "version": body.version, "strategy": body.strategy.value},
+        after={
+            "task_id": task_id,
+            "version": body.version,
+            "artifact_id": body.artifact_id,
+            "strategy": body.strategy.value,
+            "mode": "artifact" if body.artifact_id else "ci",
+        },
         ip=request.client.host if request.client else None,
         ua=request.headers.get("user-agent"),
     )
     deployer = DeploymentService(
         db,
         adapter_provider=provider,
+        artifact_deployer=artifact_deployer,
         health_checker=health_checker,
         rollout_provider=rollout_provider,
         auto_rollback_on_health_fail=request.app.state.settings.auto_rollback_on_health_fail,
@@ -512,7 +527,12 @@ async def _start_deploy(
         deployer.run_deploy,
         task_id=task_id,
         service_id=service.id,
-        request=DeployRequest(version=body.version, strategy=body.strategy, git_sha=body.git_sha),
+        request=DeployRequest(
+            version=body.version,
+            strategy=body.strategy,
+            git_sha=body.git_sha,
+            artifact_id=body.artifact_id,
+        ),
         operator=operator,
     )
     _notify_key_operation(
@@ -527,6 +547,40 @@ async def _start_deploy(
     return task_id
 
 
+async def _resolve_artifact_request(
+    *,
+    service_id: str,
+    body: DeployRequestBody,
+    artifact_deployer,
+) -> tuple[DeployRequestBody, ArtifactDeployInput | None]:
+    if body.artifact_id is None:
+        return body, None
+    if body.strategy != DeploymentStrategy.ROLLING:
+        raise AppError(
+            "artifact_strategy_not_implemented",
+            "制品直发首版仅支持 rolling 策略",
+            status_code=501,
+        )
+
+    deploy_input = await artifact_deployer.resolve(service_id, body.artifact_id)
+    if body.version is not None and body.version != deploy_input.version:
+        raise AppError(
+            "artifact_metadata_mismatch",
+            "请求 version 与制品记录不一致",
+            status_code=409,
+        )
+    if body.git_sha is not None and body.git_sha != deploy_input.git_sha:
+        raise AppError(
+            "artifact_metadata_mismatch",
+            "请求 git_sha 与制品记录不一致",
+            status_code=409,
+        )
+    return (
+        body.model_copy(update={"version": deploy_input.version, "git_sha": deploy_input.git_sha}),
+        deploy_input,
+    )
+
+
 @router.post("/{service_id}/deploy", status_code=202)
 async def deploy_service(
     service_id: str,
@@ -536,6 +590,7 @@ async def deploy_service(
     session: AsyncSession = Depends(get_session),
     db: Database = Depends(get_database),
     provider=Depends(get_pipeline_adapter_provider),
+    artifact_deployer=Depends(get_artifact_deployment_service),
     health_checker=Depends(get_health_checker),
     rollout_provider=Depends(get_rollout_provider),
     user: User = Depends(get_current_user),
@@ -545,15 +600,20 @@ async def deploy_service(
     鉴权按 service.env 判 service:{env}:deploy。task 与审计在请求会话内落库
     (先于后台任务运行),后台任务另起会话跑 DeploymentService 编排。
     """
-    if provider is None:
+    service = await ServiceRepository(session).get_service(service_id)
+    _require_service_permission(user, service, TaskType.DEPLOY)
+    body, _artifact = await _resolve_artifact_request(
+        service_id=service_id,
+        body=body,
+        artifact_deployer=artifact_deployer,
+    )
+
+    if body.artifact_id is None and provider is None:
         raise AppError(
             "pipeline_not_configured",
             "未配置 CI 流水线,无法触发部署",
             status_code=501,
         )
-
-    service = await ServiceRepository(session).get_service(service_id)
-    _require_service_permission(user, service, TaskType.DEPLOY)
 
     # 部署前质量门禁(§7.2):带 git_sha 且策略开启时,存在 critical 拦截(422)。
     # 拦截也要留痕(§7.2「门禁结果写审计」):记一条 FAILED 审计后再上抛,使"谁在
@@ -594,6 +654,7 @@ async def deploy_service(
             "version": body.version,
             "strategy": body.strategy.value,
             "git_sha": body.git_sha,
+            "artifact_id": body.artifact_id,
         },
         request=request,
         session=session,
@@ -610,6 +671,7 @@ async def deploy_service(
         session=session,
         db=db,
         provider=provider,
+        artifact_deployer=artifact_deployer,
         operator=user.username,
         health_checker=health_checker,
         rollout_provider=rollout_provider,

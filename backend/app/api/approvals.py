@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
     get_agent_registry,
+    get_artifact_deployment_service,
     get_current_user,
     get_database,
     get_health_checker,
@@ -87,6 +88,7 @@ async def approve(
     session: AsyncSession = Depends(get_session),
     db: Database = Depends(get_database),
     provider=Depends(get_pipeline_adapter_provider),
+    artifact_deployer=Depends(get_artifact_deployment_service),
     health_checker=Depends(get_health_checker),
     rollout_provider=Depends(get_rollout_provider),
     secrets: SecretStore = Depends(get_secret_store),
@@ -116,10 +118,11 @@ async def approve(
             status_code=501,
         )
     # deploy/rollback 需 CI 适配器;delete 走 SSH/agent 生命周期,不需要 provider。
-    if approval.action in (ApprovalAction.DEPLOY, ApprovalAction.ROLLBACK) and provider is None:
+    payload = approval.payload or {}
+    ci_deploy = approval.action == ApprovalAction.DEPLOY and not payload.get("artifact_id")
+    if (approval.action == ApprovalAction.ROLLBACK or ci_deploy) and provider is None:
         raise AppError("pipeline_not_configured", "未配置 CI 流水线,无法执行", status_code=501)
 
-    payload = approval.payload or {}
     task = await TaskRepository(session).create(
         type=task_type,
         target=f"service:{approval.service_id}",
@@ -162,6 +165,7 @@ async def approve(
         deployer = DeploymentService(
             db,
             adapter_provider=provider,
+            artifact_deployer=artifact_deployer,
             health_checker=health_checker,
             rollout_provider=rollout_provider,
             auto_rollback_on_health_fail=request.app.state.settings.auto_rollback_on_health_fail,
@@ -180,9 +184,10 @@ async def approve(
                 task_id=task_id,
                 service_id=approval.service_id,
                 request=DeployRequest(
-                    version=payload.get("version", ""),
+                    version=payload.get("version"),
                     strategy=strategy,
                     git_sha=payload.get("git_sha"),
+                    artifact_id=payload.get("artifact_id"),
                 ),
                 operator=operator,
             )

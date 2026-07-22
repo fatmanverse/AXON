@@ -20,8 +20,11 @@ from app.adapters.pipeline import PipelineAdapter, PipelineRunStatus
 from app.core.config import Settings
 from app.core.db import Database
 from app.main import create_app
+from app.models.artifact import ArtifactRegistryType
 from app.models.base import Base
 from app.schemas.environment import EnvironmentCreate
+from app.services.approval_repository import ApprovalRepository
+from app.services.artifact_deployment_service import ArtifactDeployInput
 from app.services.auth_service import AuthService
 from app.services.environment_repository import EnvironmentRepository
 
@@ -35,6 +38,21 @@ class _FakeAdapter(PipelineAdapter):
 
     async def get_logs(self, ref: str, *, run_id: str) -> str:
         return "log"
+
+
+class _FakeArtifactDeployer:
+    def __init__(self) -> None:
+        self.deploy_input: ArtifactDeployInput | None = None
+        self.deployed: list[tuple[str, str]] = []
+
+    async def resolve(self, service_id: str, artifact_id: str) -> ArtifactDeployInput:
+        assert self.deploy_input is not None
+        return self.deploy_input
+
+    async def deploy(self, service_id: str, artifact_id: str) -> ArtifactDeployInput:
+        self.deployed.append((service_id, artifact_id))
+        assert self.deploy_input is not None
+        return self.deploy_input
 
 
 @pytest_asyncio.fixture
@@ -55,6 +73,7 @@ async def app_client(tmp_path):
     async with AsyncClient(transport=transport, base_url="http://t") as client:
         async with app.router.lifespan_context(app):
             app.state.pipeline_adapter_provider = lambda _svc: _FakeAdapter()
+            app.state.artifact_deployment_service = _FakeArtifactDeployer()
             db: Database = app.state.db
             async with db.engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
@@ -68,9 +87,7 @@ async def app_client(tmp_path):
                 env_repo = EnvironmentRepository(session)
                 await env_repo.create(EnvironmentCreate(name="dev"))
                 await env_repo.create(EnvironmentCreate(name="staging"))
-                await env_repo.create(
-                    EnvironmentCreate(name="prod", requires_approval=True)
-                )
+                await env_repo.create(EnvironmentCreate(name="prod", requires_approval=True))
             yield client, settings, app
 
 
@@ -226,6 +243,47 @@ async def test_cannot_approve_own_request(app_client):
 
     resp = await client.post(f"/api/approvals/{approval_id}/approve", headers=_auth(token))
     assert resp.status_code == 403
+
+
+async def test_prod_artifact_approval_preserves_id_and_dispatches_direct_deployer(app_client):
+    client, _, app = app_client
+    operator = await _token(client, "operator", "op-pw")
+    boss = await _token(client, "boss", "boss-pw")
+    service_id = await _create_service(client, operator, "artifact-billing", "prod")
+    artifact_id = "a" * 32
+    artifact_deployer = app.state.artifact_deployment_service
+    artifact_deployer.deploy_input = ArtifactDeployInput(
+        service_id=service_id,
+        artifact_id=artifact_id,
+        version="v2.0.0",
+        git_sha="abc123",
+        uri="/var/lib/axon/artifacts/billing.tar.gz",
+        registry_type=ArtifactRegistryType.GENERIC,
+    )
+    app.state.pipeline_adapter_provider = None
+
+    pending = await client.post(
+        f"/api/services/{service_id}/deploy",
+        headers=_auth(operator),
+        json={"artifact_id": artifact_id, "strategy": "rolling"},
+    )
+
+    assert pending.status_code == 202
+    approval_id = pending.json()["data"]["approval_id"]
+    async with app.state.db.session() as session:
+        approval = await ApprovalRepository(session).get(approval_id)
+        payload = approval.payload
+    assert payload["artifact_id"] == artifact_id
+    assert payload["version"] == "v2.0.0"
+    assert payload["git_sha"] == "abc123"
+
+    approved = await client.post(
+        f"/api/approvals/{approval_id}/approve",
+        headers=_auth(boss),
+    )
+
+    assert approved.status_code == 202
+    assert artifact_deployer.deployed == [(service_id, artifact_id)]
 
 
 async def _seed_success_deployment(app, service_id):

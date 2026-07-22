@@ -18,10 +18,14 @@ from app.adapters.pipeline import PipelineAdapter, PipelineRunStatus
 from app.core.config import Settings
 from app.core.db import Database
 from app.main import create_app
+from app.models.artifact import ArtifactRegistryType
 from app.models.base import Base
+from app.models.scan_result import Scanner
 from app.models.service import Runtime, ServiceEnvironment
 from app.schemas.service import ServiceCreate
+from app.services.artifact_deployment_service import ArtifactDeployInput
 from app.services.auth_service import AuthService
+from app.services.scan_result_repository import ScanResultRepository
 from app.services.service_repository import ServiceRepository
 
 
@@ -40,6 +44,23 @@ class _FakeAdapter(PipelineAdapter):
 
     async def get_logs(self, ref: str, *, run_id: str) -> str:
         return "log"
+
+
+class _FakeArtifactDeployer:
+    def __init__(self) -> None:
+        self.deploy_input: ArtifactDeployInput | None = None
+        self.resolved: list[tuple[str, str]] = []
+        self.deployed: list[tuple[str, str]] = []
+
+    async def resolve(self, service_id: str, artifact_id: str) -> ArtifactDeployInput:
+        self.resolved.append((service_id, artifact_id))
+        assert self.deploy_input is not None
+        return self.deploy_input
+
+    async def deploy(self, service_id: str, artifact_id: str) -> ArtifactDeployInput:
+        self.deployed.append((service_id, artifact_id))
+        assert self.deploy_input is not None
+        return self.deploy_input
 
 
 @pytest_asyncio.fixture
@@ -61,6 +82,7 @@ async def app_client():
         async with app.router.lifespan_context(app):
             # 注入 fake pipeline adapter provider,避免真实 CI
             app.state.pipeline_adapter_provider = lambda _svc: _FakeAdapter()
+            app.state.artifact_deployment_service = _FakeArtifactDeployer()
             db: Database = app.state.db
             async with db.engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
@@ -86,9 +108,7 @@ async def _seed_service(app, *, env=ServiceEnvironment.PROD) -> str:
 
 
 async def _token(client, username, password):
-    resp = await client.post(
-        "/api/auth/login", json={"username": username, "password": password}
-    )
+    resp = await client.post("/api/auth/login", json={"username": username, "password": password})
     return resp.json()["data"]["access_token"]
 
 
@@ -126,9 +146,7 @@ async def test_deploy_creates_deployment_record(app_client):
         json={"version": "v2.0.0"},
     )
 
-    resp = await client.get(
-        f"/api/services/{service_id}/deployments", headers=_auth(token)
-    )
+    resp = await client.get(f"/api/services/{service_id}/deployments", headers=_auth(token))
     assert resp.status_code == 200
     rows = resp.json()["data"]
     assert len(rows) == 1
@@ -166,9 +184,7 @@ async def test_developer_can_deploy_dev(app_client):
 async def test_deploy_requires_auth(app_client):
     client, _, app = app_client
     service_id = await _seed_service(app)
-    resp = await client.post(
-        f"/api/services/{service_id}/deploy", json={"version": "v1.0"}
-    )
+    resp = await client.post(f"/api/services/{service_id}/deploy", json={"version": "v1.0"})
     assert resp.status_code == 401
 
 
@@ -181,3 +197,133 @@ async def test_deploy_unknown_service_404(app_client):
         json={"version": "v1.0"},
     )
     assert resp.status_code == 404
+
+
+async def test_artifact_deploy_does_not_require_pipeline_provider(app_client):
+    client, _, app = app_client
+    service_id = await _seed_service(app)
+    token = await _token(client, "operator", "op-pw")
+    artifact_id = "a" * 32
+    artifact_deployer = app.state.artifact_deployment_service
+    artifact_deployer.deploy_input = ArtifactDeployInput(
+        service_id=service_id,
+        artifact_id=artifact_id,
+        version="v2.0.0",
+        git_sha="abc123",
+        uri="/var/lib/axon/artifacts/billing.tar.gz",
+        registry_type=ArtifactRegistryType.GENERIC,
+    )
+    app.state.pipeline_adapter_provider = None
+
+    resp = await client.post(
+        f"/api/services/{service_id}/deploy",
+        headers=_auth(token),
+        json={"artifact_id": artifact_id, "strategy": "rolling"},
+    )
+
+    assert resp.status_code == 202
+    assert artifact_deployer.resolved
+    assert all(call == (service_id, artifact_id) for call in artifact_deployer.resolved)
+    assert artifact_deployer.deployed == [(service_id, artifact_id)]
+
+
+async def test_ci_deploy_still_requires_pipeline_provider(app_client):
+    client, _, app = app_client
+    service_id = await _seed_service(app)
+    token = await _token(client, "operator", "op-pw")
+    app.state.pipeline_adapter_provider = None
+
+    resp = await client.post(
+        f"/api/services/{service_id}/deploy",
+        headers=_auth(token),
+        json={"version": "v1.0.0"},
+    )
+
+    assert resp.status_code == 501
+    assert resp.json()["error"]["code"] == "pipeline_not_configured"
+
+
+async def test_artifact_deploy_rejects_request_metadata_mismatch(app_client):
+    client, _, app = app_client
+    service_id = await _seed_service(app)
+    token = await _token(client, "operator", "op-pw")
+    artifact_id = "a" * 32
+    artifact_deployer = app.state.artifact_deployment_service
+    artifact_deployer.deploy_input = ArtifactDeployInput(
+        service_id=service_id,
+        artifact_id=artifact_id,
+        version="v2.0.0",
+        git_sha="abc123",
+        uri="/var/lib/axon/artifacts/billing.tar.gz",
+        registry_type=ArtifactRegistryType.GENERIC,
+    )
+
+    resp = await client.post(
+        f"/api/services/{service_id}/deploy",
+        headers=_auth(token),
+        json={"artifact_id": artifact_id, "version": "v1.0.0"},
+    )
+
+    assert resp.status_code == 409
+    assert resp.json()["error"]["code"] == "artifact_metadata_mismatch"
+    assert artifact_deployer.deployed == []
+
+
+async def test_artifact_deploy_only_supports_rolling_strategy(app_client):
+    client, _, app = app_client
+    service_id = await _seed_service(app)
+    token = await _token(client, "operator", "op-pw")
+    artifact_id = "a" * 32
+    artifact_deployer = app.state.artifact_deployment_service
+    artifact_deployer.deploy_input = ArtifactDeployInput(
+        service_id=service_id,
+        artifact_id=artifact_id,
+        version="v2.0.0",
+        git_sha="abc123",
+        uri="/var/lib/axon/artifacts/billing.tar.gz",
+        registry_type=ArtifactRegistryType.GENERIC,
+    )
+
+    resp = await client.post(
+        f"/api/services/{service_id}/deploy",
+        headers=_auth(token),
+        json={"artifact_id": artifact_id, "strategy": "recreate"},
+    )
+
+    assert resp.status_code == 501
+    assert resp.json()["error"]["code"] == "artifact_strategy_not_implemented"
+    assert artifact_deployer.deployed == []
+
+
+async def test_artifact_deploy_quality_gate_uses_resolved_git_sha(app_client):
+    client, _, app = app_client
+    service_id = await _seed_service(app)
+    token = await _token(client, "operator", "op-pw")
+    artifact_id = "a" * 32
+    artifact_deployer = app.state.artifact_deployment_service
+    artifact_deployer.deploy_input = ArtifactDeployInput(
+        service_id=service_id,
+        artifact_id=artifact_id,
+        version="v2.0.0",
+        git_sha="blocked-sha",
+        uri="/var/lib/axon/artifacts/billing.tar.gz",
+        registry_type=ArtifactRegistryType.GENERIC,
+    )
+    async with app.state.db.session() as session:
+        await ScanResultRepository(session).upsert(
+            service="billing",
+            git_sha="blocked-sha",
+            scanner=Scanner.SONARQUBE,
+            critical=1,
+            passed=False,
+        )
+
+    resp = await client.post(
+        f"/api/services/{service_id}/deploy",
+        headers=_auth(token),
+        json={"artifact_id": artifact_id},
+    )
+
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "quality_gate_blocked"
+    assert artifact_deployer.deployed == []
