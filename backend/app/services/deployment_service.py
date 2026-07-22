@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import Protocol
 
 from app.adapters.pipeline import PipelineAdapter
 from app.core.db import Database
@@ -25,6 +26,7 @@ from app.core.logging import get_logger
 from app.models.deployment import DeploymentSource, DeploymentStatus, DeploymentStrategy
 from app.models.service import Service
 from app.models.task import TaskStatus
+from app.services.artifact_deployment_service import ArtifactDeployInput
 from app.services.deployment_repository import DeploymentRepository
 from app.services.health_checker import HealthChecker
 from app.services.release_strategy import RolloutContext, execute_release_strategy
@@ -44,13 +46,20 @@ AdapterProvider = Callable[[Service], PipelineAdapter]
 RolloutProvider = Callable[[Service], Awaitable[RolloutContext | None]]
 
 
+class ArtifactDeployer(Protocol):
+    async def resolve(self, service_id: str, artifact_id: str) -> ArtifactDeployInput: ...
+
+    async def deploy(self, service_id: str, artifact_id: str) -> ArtifactDeployInput: ...
+
+
 @dataclass(frozen=True)
 class DeployRequest:
     """一次部署请求的参数(§15.2 body:{version, strategy, env})。env 取自 service。"""
 
-    version: str
+    version: str | None
     strategy: DeploymentStrategy = DeploymentStrategy.ROLLING
     git_sha: str | None = None
+    artifact_id: str | None = None
 
 
 class DeploymentService:
@@ -63,6 +72,7 @@ class DeploymentService:
         adapter_provider: AdapterProvider,
         health_checker: HealthChecker | None = None,
         rollout_provider: RolloutProvider | None = None,
+        artifact_deployer: ArtifactDeployer | None = None,
         auto_rollback_on_health_fail: bool = False,
     ) -> None:
         self._db = db
@@ -72,6 +82,7 @@ class DeploymentService:
         # (runtime, strategy) 执行滚动/重建等。默认 None——未注入时保持原行为
         # (仅触发 CI,由 CI 内部铺开),不破坏既有部署路径与测试。
         self._rollout_provider = rollout_provider
+        self._artifact_deployer = artifact_deployer
         # 发布后健康检查失败自动回滚(§11.2):默认关闭。开启后健康检查未通过时,
         # 除标 FAILED 外再自动重部署上一版成功制品(留 rolled_back 闭环)。
         self._auto_rollback_on_health_fail = auto_rollback_on_health_fail
@@ -89,7 +100,9 @@ class DeploymentService:
             await TaskRepository(session).mark_running(task_id)
 
         try:
-            deployment_id, health_check = await self._execute(service_id, request, operator)
+            deployment_id, health_check, deployed_version = await self._execute(
+                service_id, request, operator
+            )
         except Exception as exc:
             message = exc.message if isinstance(exc, AppError) else str(exc)
             log.warning("deploy_failed", service_id=service_id, error=message)
@@ -128,7 +141,7 @@ class DeploymentService:
         async with self._db.session() as session:
             await DeploymentRepository(session).mark_status(deployment_id, DeploymentStatus.SUCCESS)
             await TaskRepository(session).mark_result(
-                task_id, TaskStatus.SUCCESS, result={"version": request.version}
+                task_id, TaskStatus.SUCCESS, result={"version": deployed_version}
             )
 
     async def _try_auto_rollback(
@@ -159,13 +172,19 @@ class DeploymentService:
 
     async def _execute(
         self, service_id: str, request: DeployRequest, operator: str
-    ) -> tuple[str, dict | None]:
+    ) -> tuple[str, dict | None, str | None]:
         """加载服务→落 running deployment→触发 CI。
 
         CI 触发成功后 deployment 保持 RUNNING(不落终态),由 run_deploy 依据发布后
         健康检查再落 SUCCESS/FAILED——避免先落 SUCCESS 再翻 FAILED 的非法状态流转。
         返回 (deployment_id, 该 service 的 health_check 配置);无配置则第二项为 None。
         """
+        if request.artifact_id is not None:
+            return await self._execute_artifact(service_id, request, operator)
+
+        if request.version is None:
+            raise AppError("invalid_deploy_request", "CI 部署需 version", status_code=400)
+
         # 加载服务并取出编排所需字段(避免会话关闭后惰性访问)
         async with self._db.session() as session:
             service = await ServiceRepository(session).get_service(service_id)
@@ -239,7 +258,62 @@ class DeploymentService:
                     )
                 raise
 
-        return (deployment_id, health_check)
+        return (deployment_id, health_check, request.version)
+
+    async def _execute_artifact(
+        self,
+        service_id: str,
+        request: DeployRequest,
+        operator: str,
+    ) -> tuple[str, dict | None, str | None]:
+        if self._artifact_deployer is None:
+            raise AppError(
+                "artifact_deploy_not_configured",
+                "未配置制品部署服务",
+                status_code=501,
+            )
+        artifact_id = request.artifact_id
+        assert artifact_id is not None
+        deploy_input = await self._artifact_deployer.resolve(service_id, artifact_id)
+
+        async with self._db.session() as session:
+            service = await ServiceRepository(session).get_service(service_id)
+            env = service.env
+            health_check = service.health_check
+            previous = await DeploymentRepository(session).latest_successful(service_id, env=env)
+            previous_id = previous.id if previous else None
+            scan_result_id = None
+            if deploy_input.git_sha:
+                scans = await ScanResultRepository(session).list_for_git_sha(deploy_input.git_sha)
+                if scans:
+                    scan_result_id = scans[0].id
+
+        async with self._db.session() as session:
+            deployment = await DeploymentRepository(session).create(
+                service_id=service_id,
+                env=env,
+                source=DeploymentSource.UI_TRIGGERED,
+                strategy=request.strategy,
+                version=deploy_input.version,
+                git_sha=deploy_input.git_sha,
+                artifact=deploy_input.uri,
+                artifact_id=deploy_input.artifact_id,
+                operator=operator,
+                previous_deployment_id=previous_id,
+                scan_result_id=scan_result_id,
+            )
+            deployment_id = deployment.id
+
+        try:
+            await self._artifact_deployer.deploy(service_id, artifact_id)
+        except Exception:
+            async with self._db.session() as session:
+                await DeploymentRepository(session).mark_status(
+                    deployment_id, DeploymentStatus.FAILED
+                )
+            raise
+
+        return (deployment_id, health_check, deploy_input.version)
 
     async def run_rollback(
         self,

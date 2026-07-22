@@ -14,11 +14,13 @@ import pytest_asyncio
 
 from app.adapters.pipeline import PipelineAdapter, PipelineRunStatus
 from app.core.db import Database
+from app.core.errors import AppError
 from app.models.base import Base
 from app.models.deployment import DeploymentSource, DeploymentStatus, DeploymentStrategy
 from app.models.service import Runtime, ServiceEnvironment
 from app.models.task import TaskStatus, TaskType
 from app.schemas.service import ServiceCreate
+from app.services.artifact_deployment_service import ArtifactDeployInput
 from app.services.deployment_repository import DeploymentRepository
 from app.services.deployment_service import DeploymentService, DeployRequest
 from app.services.service_repository import ServiceRepository
@@ -44,6 +46,24 @@ class _FakeAdapter(PipelineAdapter):
 
     async def get_logs(self, ref: str, *, run_id: str) -> str:
         return "log"
+
+
+class _FakeArtifactDeployer:
+    def __init__(self, deploy_input: ArtifactDeployInput, *, fail: bool = False) -> None:
+        self.deploy_input = deploy_input
+        self.fail = fail
+        self.resolved: list[tuple[str, str]] = []
+        self.deployed: list[tuple[str, str]] = []
+
+    async def resolve(self, service_id: str, artifact_id: str) -> ArtifactDeployInput:
+        self.resolved.append((service_id, artifact_id))
+        return self.deploy_input
+
+    async def deploy(self, service_id: str, artifact_id: str) -> ArtifactDeployInput:
+        self.deployed.append((service_id, artifact_id))
+        if self.fail:
+            raise AppError("docker_action_failed", "runtime failed", status_code=502)
+        return self.deploy_input
 
 
 @pytest_asyncio.fixture
@@ -124,6 +144,87 @@ async def test_deploy_marks_failed_when_trigger_raises(db):
         assert task.status == TaskStatus.FAILED
         assert task.error
         deployments = await DeploymentRepository(session).list_for_service(service_id, env="prod")
+    assert deployments[0].status == DeploymentStatus.FAILED
+
+
+async def test_artifact_deploy_persists_source_of_truth_without_triggering_ci(db):
+    service_id = await _seed_service(db)
+    task_id = await _make_task(db, service_id)
+    artifact_id = "a" * 32
+    adapter = _FakeAdapter()
+    deploy_input = ArtifactDeployInput(
+        service_id=service_id,
+        artifact_id=artifact_id,
+        version="v2.0.0",
+        git_sha="abc123",
+        uri="registry.example.com/team/billing:v2.0.0",
+        registry_type="docker",
+    )
+    artifact_deployer = _FakeArtifactDeployer(deploy_input)
+    svc = DeploymentService(
+        db,
+        adapter_provider=lambda _svc: adapter,
+        artifact_deployer=artifact_deployer,
+    )
+
+    await svc.run_deploy(
+        task_id=task_id,
+        service_id=service_id,
+        request=DeployRequest(version=None, artifact_id=artifact_id),
+        operator="alice",
+    )
+
+    assert adapter.triggered == []
+    assert artifact_deployer.resolved == [(service_id, artifact_id)]
+    assert artifact_deployer.deployed == [(service_id, artifact_id)]
+    async with db.session() as session:
+        task = await TaskRepository(session).get(task_id)
+        deployments = await DeploymentRepository(session).list_for_service(service_id, env="prod")
+    assert task.status == TaskStatus.SUCCESS
+    assert task.result == {"version": "v2.0.0"}
+    assert len(deployments) == 1
+    deployment = deployments[0]
+    assert deployment.status == DeploymentStatus.SUCCESS
+    assert deployment.artifact_id == artifact_id
+    assert deployment.artifact == deploy_input.uri
+    assert deployment.version == deploy_input.version
+    assert deployment.git_sha == deploy_input.git_sha
+    assert deployment.pipeline_id is None
+
+
+async def test_artifact_runtime_failure_marks_deployment_and_task_failed(db):
+    service_id = await _seed_service(db)
+    task_id = await _make_task(db, service_id)
+    artifact_id = "a" * 32
+    deploy_input = ArtifactDeployInput(
+        service_id=service_id,
+        artifact_id=artifact_id,
+        version="v2.0.0",
+        git_sha="abc123",
+        uri="registry.example.com/team/billing:v2.0.0",
+        registry_type="docker",
+    )
+    artifact_deployer = _FakeArtifactDeployer(deploy_input, fail=True)
+    adapter = _FakeAdapter()
+    svc = DeploymentService(
+        db,
+        adapter_provider=lambda _svc: adapter,
+        artifact_deployer=artifact_deployer,
+    )
+
+    await svc.run_deploy(
+        task_id=task_id,
+        service_id=service_id,
+        request=DeployRequest(version=None, artifact_id=artifact_id),
+        operator="alice",
+    )
+
+    assert adapter.triggered == []
+    async with db.session() as session:
+        task = await TaskRepository(session).get(task_id)
+        deployments = await DeploymentRepository(session).list_for_service(service_id, env="prod")
+    assert task.status == TaskStatus.FAILED
+    assert task.error == "runtime failed"
     assert deployments[0].status == DeploymentStatus.FAILED
 
 
