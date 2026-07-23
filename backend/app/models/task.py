@@ -11,7 +11,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import DateTime, Enum, String
+from sqlalchemy import DateTime, Enum, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, JSONVariant, TimestampMixin
@@ -66,6 +66,19 @@ def _uuid() -> str:
 
 class Task(Base, TimestampMixin):
     __tablename__ = "tasks"
+    __table_args__ = (
+        Index(
+            "uq_tasks_active_deployment_target",
+            "target",
+            unique=True,
+            postgresql_where=text(
+                "type IN ('DEPLOY', 'ROLLBACK') AND status IN ('PENDING', 'RUNNING')"
+            ),
+            sqlite_where=text(
+                "type IN ('DEPLOY', 'ROLLBACK') AND status IN ('PENDING', 'RUNNING')"
+            ),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     type: Mapped[TaskType] = mapped_column(Enum(TaskType, name="task_type"), nullable=False)

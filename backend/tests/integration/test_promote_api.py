@@ -19,10 +19,12 @@ from app.core.db import Database
 from app.main import create_app
 from app.models.base import Base
 from app.models.deployment import DeploymentSource, DeploymentStatus
+from app.models.task import TaskType
 from app.schemas.environment import EnvironmentCreate
 from app.services.auth_service import AuthService
 from app.services.deployment_repository import DeploymentRepository
 from app.services.environment_repository import EnvironmentRepository
+from app.services.task_repository import TaskRepository
 
 
 class _FakeAdapter(PipelineAdapter):
@@ -187,3 +189,26 @@ async def test_promote_requires_auth(app_client):
         json={"source_service_id": "x"},
     )
     assert resp.status_code == 401
+
+
+async def test_promote_rejects_when_target_service_has_active_deployment_operation(app_client):
+    client, _, app = app_client
+    token = await _token(client, "operator", "op-pw")
+    staging_id = await _create_service(client, token, "billing", "staging")
+    prod_id = await _create_service(client, token, "billing", "prod")
+    async with app.state.db.session() as session:
+        active = await TaskRepository(session).create_deployment_operation(
+            type=TaskType.ROLLBACK,
+            service_id=prod_id,
+            created_by="other-operator",
+        )
+
+    resp = await client.post(
+        f"/api/services/{prod_id}/promote",
+        headers=_auth(token),
+        json={"source_service_id": staging_id},
+    )
+
+    assert resp.status_code == 409
+    assert resp.json()["error"]["code"] == "deployment_in_progress"
+    assert resp.json()["error"]["details"] == {"active_task_id": active.id}

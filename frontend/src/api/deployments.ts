@@ -1,6 +1,6 @@
 /**
  * 部署与配置 API 服务(T2.8)。对齐后端 §12/§15.2:
- * - 部署历史 / 一键回滚(回滚也走 task 异步)。
+ * - 部署历史 / 指定历史 deployment 回滚(回滚也走 task 异步)。
  * - 配置版本 CRUD:列版本、取当前、新建版本、切换生效版。
  */
 
@@ -19,6 +19,7 @@ export interface Deployment {
   git_sha: string | null;
   version: string | null;
   artifact: string | null;
+  artifact_id: string | null;
   strategy: DeploymentStrategy;
   source: DeploymentSource;
   pipeline_id: string | null;
@@ -57,7 +58,8 @@ export interface ConfigDelivery {
 }
 
 export interface DeployBody {
-  version: string;
+  version?: string;
+  artifact_id?: string;
   strategy?: DeploymentStrategy;
   git_sha?: string;
 }
@@ -96,8 +98,13 @@ export function deployService(serviceId: string, body: DeployBody): Promise<Depl
   return api.post<DeployResult>(`/api/services/${serviceId}/deploy`, body);
 }
 
-export function rollbackService(serviceId: string): Promise<TaskAccepted> {
-  return api.post<TaskAccepted>(`/api/services/${serviceId}/rollback`);
+export function rollbackService(
+  serviceId: string,
+  targetDeploymentId: string,
+): Promise<DeployResult> {
+  return api.post<DeployResult>(`/api/services/${serviceId}/rollback`, {
+    target_deployment_id: targetDeploymentId,
+  });
 }
 
 export function listConfigVersions(serviceId: string): Promise<ConfigVersion[]> {
@@ -115,17 +122,11 @@ export function createConfigVersion(
   return api.post<ConfigVersion>(`/api/services/${serviceId}/configs`, body);
 }
 
-export function activateConfigVersion(
-  serviceId: string,
-  version: number,
-): Promise<ConfigVersion> {
+export function activateConfigVersion(serviceId: string, version: number): Promise<ConfigVersion> {
   return api.post<ConfigVersion>(`/api/services/${serviceId}/configs/${version}/activate`);
 }
 
-export function applyConfigVersion(
-  serviceId: string,
-  version: number,
-): Promise<TaskAccepted> {
+export function applyConfigVersion(serviceId: string, version: number): Promise<TaskAccepted> {
   return api.post<TaskAccepted>(`/api/services/${serviceId}/configs/${version}/apply`);
 }
 
@@ -133,9 +134,7 @@ export function listConfigDeliveries(
   serviceId: string,
   version: number,
 ): Promise<ConfigDelivery[]> {
-  return api.get<ConfigDelivery[]>(
-    `/api/services/${serviceId}/configs/${version}/deliveries`,
-  );
+  return api.get<ConfigDelivery[]>(`/api/services/${serviceId}/configs/${version}/deliveries`);
 }
 
 export interface ScanResult {
@@ -160,7 +159,5 @@ export function getDeploymentDetail(
   serviceId: string,
   deploymentId: string,
 ): Promise<DeploymentDetail> {
-  return api.get<DeploymentDetail>(
-    `/api/services/${serviceId}/deployments/${deploymentId}`,
-  );
+  return api.get<DeploymentDetail>(`/api/services/${serviceId}/deployments/${deploymentId}`);
 }

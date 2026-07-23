@@ -8,6 +8,7 @@ import pytest
 import pytest_asyncio
 
 from app.core.db import Database
+from app.core.errors import AppError
 from app.models.base import Base
 from app.models.deployment import DeploymentSource, DeploymentStatus, DeploymentStrategy
 from app.services.deployment_repository import DeploymentRepository
@@ -59,8 +60,6 @@ async def test_get_returns_created(db):
 
 
 async def test_get_missing_raises_404(db):
-    from app.core.errors import AppError
-
     async with db.session() as session:
         with pytest.raises(AppError) as exc:
             await DeploymentRepository(session).get("0" * 32)
@@ -148,3 +147,116 @@ async def test_create_deployment_with_artifact_id(db):
         fetched = await DeploymentRepository(session).get(dep_id)
     assert fetched.artifact_id == "abcdef01234567890123456789012345"
     assert fetched.artifact == "/tmp/app-1.0.0.tar.gz"
+
+
+async def test_resolve_rollback_target_uses_current_previous_deployment(db):
+    async with db.session() as session:
+        repo = DeploymentRepository(session)
+        target = await _create(repo, version="v1")
+        await repo.mark_status(target.id, DeploymentStatus.SUCCESS)
+        current = await _create(
+            repo,
+            version="v2",
+            previous_deployment_id=target.id,
+        )
+        await repo.mark_status(current.id, DeploymentStatus.SUCCESS)
+
+        resolved_current, resolved_target = await repo.resolve_rollback_target(
+            "svc1",
+            env="prod",
+        )
+
+    assert resolved_current.id == current.id
+    assert resolved_target.id == target.id
+
+
+async def test_resolve_rollback_target_accepts_explicit_rolled_back_history(db):
+    async with db.session() as session:
+        repo = DeploymentRepository(session)
+        target = await _create(repo, version="v1")
+        await repo.mark_status(target.id, DeploymentStatus.SUCCESS)
+        await repo.mark_status(target.id, DeploymentStatus.ROLLED_BACK)
+        current = await _create(repo, version="v3")
+        await repo.mark_status(current.id, DeploymentStatus.SUCCESS)
+
+        resolved_current, resolved_target = await repo.resolve_rollback_target(
+            "svc1",
+            env="prod",
+            target_deployment_id=target.id,
+        )
+
+    assert resolved_current.id == current.id
+    assert resolved_target.id == target.id
+
+
+@pytest.mark.parametrize(
+    ("target_kwargs", "expected_code"),
+    [
+        ({"service_id": "other"}, "rollback_target_mismatch"),
+        ({"env": "dev"}, "rollback_target_mismatch"),
+        ({"leave_running": True}, "rollback_target_invalid"),
+        ({"version": None}, "rollback_target_invalid"),
+    ],
+)
+async def test_resolve_explicit_rollback_target_rejects_invalid_history(
+    db,
+    target_kwargs,
+    expected_code,
+):
+    async with db.session() as session:
+        repo = DeploymentRepository(session)
+        create_kwargs = {
+            key: value for key, value in target_kwargs.items() if key != "leave_running"
+        }
+        target = await _create(repo, **create_kwargs)
+        if not target_kwargs.get("leave_running"):
+            await repo.mark_status(target.id, DeploymentStatus.SUCCESS)
+        current = await _create(repo, version="v2")
+        await repo.mark_status(current.id, DeploymentStatus.SUCCESS)
+
+        with pytest.raises(AppError) as exc_info:
+            await repo.resolve_rollback_target(
+                "svc1",
+                env="prod",
+                target_deployment_id=target.id,
+            )
+
+    assert exc_info.value.code == expected_code
+    assert exc_info.value.status_code == 409
+
+
+async def test_resolve_explicit_rollback_target_rejects_current_and_missing(db):
+    async with db.session() as session:
+        repo = DeploymentRepository(session)
+        current = await _create(repo, version="v2")
+        await repo.mark_status(current.id, DeploymentStatus.SUCCESS)
+
+        with pytest.raises(AppError) as current_error:
+            await repo.resolve_rollback_target(
+                "svc1",
+                env="prod",
+                target_deployment_id=current.id,
+            )
+        with pytest.raises(AppError) as missing_error:
+            await repo.resolve_rollback_target(
+                "svc1",
+                env="prod",
+                target_deployment_id="0" * 32,
+            )
+
+    assert current_error.value.code == "rollback_target_is_current"
+    assert missing_error.value.code == "rollback_target_not_found"
+    assert missing_error.value.status_code == 404
+
+
+async def test_resolve_implicit_rollback_target_requires_previous(db):
+    async with db.session() as session:
+        repo = DeploymentRepository(session)
+        current = await _create(repo, version="v2")
+        await repo.mark_status(current.id, DeploymentStatus.SUCCESS)
+
+        with pytest.raises(AppError) as exc_info:
+            await repo.resolve_rollback_target("svc1", env="prod")
+
+    assert exc_info.value.code == "no_rollback_target"
+    assert exc_info.value.status_code == 409

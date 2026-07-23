@@ -62,7 +62,7 @@ async def _boot(app):
     db: Database = app.state.db
     async with db.engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    # 建服务 + 一次成功部署(回滚目标)
+    # 建服务 + v1→v2 成功链；告警回滚应沿 v2.previous 回到 v1。
     async with db.session() as session:
         svc = await ServiceRepository(session).create_service(
             ServiceCreate(
@@ -74,14 +74,23 @@ async def _boot(app):
         )
         sid = svc.id
         repo = DeploymentRepository(session)
-        dep = await repo.create(
+        v1 = await repo.create(
             service_id=sid,
             env="prod",
             source=DeploymentSource.UI_TRIGGERED,
             version="v1",
             artifact="registry/app:v1",
         )
-        await repo.mark_status(dep.id, DeploymentStatus.SUCCESS)
+        await repo.mark_status(v1.id, DeploymentStatus.SUCCESS)
+        v2 = await repo.create(
+            service_id=sid,
+            env="prod",
+            source=DeploymentSource.UI_TRIGGERED,
+            version="v2",
+            artifact="registry/app:v2",
+            previous_deployment_id=v1.id,
+        )
+        await repo.mark_status(v2.id, DeploymentStatus.SUCCESS)
     return sid
 
 
@@ -147,9 +156,9 @@ async def test_critical_alert_triggers_rollback_when_enabled(make_client):
     resp = await client.post("/api/webhooks/alert", content=body, headers=_headers(body))
     assert resp.status_code == 200
 
-    # 回滚生成新 deployment:原来 1 条,回滚后应 >= 2 条
+    # 回滚生成新 deployment:原来 2 条,回滚后应 >= 3 条
     rows = await _deployment_count(app, sid)
-    assert len(rows) >= 2
+    assert len(rows) >= 3
 
 
 async def test_no_rollback_when_flag_off(make_client):
@@ -158,7 +167,7 @@ async def test_no_rollback_when_flag_off(make_client):
     resp = await client.post("/api/webhooks/alert", content=body, headers=_headers(body))
     assert resp.status_code == 200
     rows = await _deployment_count(app, sid)
-    assert len(rows) == 1  # 未触发回滚
+    assert len(rows) == 2  # 未触发回滚
 
 
 async def test_no_rollback_for_warning(make_client):
@@ -167,7 +176,7 @@ async def test_no_rollback_for_warning(make_client):
     resp = await client.post("/api/webhooks/alert", content=body, headers=_headers(body))
     assert resp.status_code == 200
     rows = await _deployment_count(app, sid)
-    assert len(rows) == 1
+    assert len(rows) == 2
 
 
 async def test_debounce_skips_repeated_firing_same_fingerprint(make_client):

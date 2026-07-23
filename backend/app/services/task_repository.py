@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import realtime
@@ -27,6 +28,50 @@ class TaskRepository:
         self._session.add(task)
         await self._session.flush()
         return task
+
+    async def create_deployment_operation(
+        self,
+        *,
+        type: TaskType,
+        service_id: str,
+        payload: dict[str, Any] | None = None,
+        created_by: str | None = None,
+    ) -> Task:
+        """创建受同 service 互斥约束的 deploy/rollback task。"""
+        if type not in {TaskType.DEPLOY, TaskType.ROLLBACK}:
+            raise ValueError("deployment operation 仅支持 deploy/rollback task")
+
+        target = f"service:{service_id}"
+        task = Task(type=type, target=target, payload=payload, created_by=created_by)
+        try:
+            async with self._session.begin_nested():
+                self._session.add(task)
+                await self._session.flush()
+        except IntegrityError:
+            active = await self.active_deployment_operation(target)
+            if active is None:
+                raise
+            raise AppError(
+                "deployment_in_progress",
+                "该服务已有部署或回滚任务正在执行",
+                status_code=409,
+                details={"active_task_id": active.id},
+            ) from None
+        return task
+
+    async def active_deployment_operation(self, target: str) -> Task | None:
+        stmt = (
+            select(Task)
+            .where(
+                Task.target == target,
+                Task.type.in_((TaskType.DEPLOY, TaskType.ROLLBACK)),
+                Task.status.in_((TaskStatus.PENDING, TaskStatus.RUNNING)),
+            )
+            .order_by(Task.created_at.desc())
+            .limit(1)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def get(self, task_id: str) -> Task:
         task = await self._session.get(Task, task_id)

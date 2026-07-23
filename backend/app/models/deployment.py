@@ -1,7 +1,7 @@
 """deployments 部署记录模型与状态机(§14.3 「焊点」)。
 
 deployment 是把「提交→扫描→部署→监控」串起来的关联键载体:一条记录锚定
-service + git_sha + env,并携带 previous_deployment_id(支持一键回滚)与
+service + git_sha + env,并携带 previous_deployment_id(支持历史版本回滚)与
 scan_result_id(交付态关联,Epic 3 回填)。
 
 状态机规则:running → success / failed / rolled_back。三者均为终态,**只前进
@@ -112,7 +112,7 @@ class Deployment(Base, TimestampMixin):
         default=DeploymentStatus.RUNNING,
         index=True,
     )
-    # 上一次成功部署(支持一键回滚);scan_result_id 由 Epic 3 按 git_sha 回填。
+    # 上一次成功部署(支持兼容 previous 回滚);scan_result_id 由 Epic 3 按 git_sha 回填。
     previous_deployment_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     scan_result_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # 新链路:控制面自建构建产出的制品(软引用 artifacts.id)。旧链路继续填 artifact

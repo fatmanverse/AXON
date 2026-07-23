@@ -216,9 +216,9 @@ async def alert_webhook(request: Request, background: BackgroundTasks) -> dict:
                             recent_rollback_fingerprints=recent_fps,
                         ):
                             continue
-                        task = await task_repo.create(
+                        task = await task_repo.create_deployment_operation(
                             type=TaskType.ROLLBACK,
-                            target=f"service:{svc.id}",
+                            service_id=svc.id,
                             payload={
                                 "env": env,
                                 "trigger": "alert",

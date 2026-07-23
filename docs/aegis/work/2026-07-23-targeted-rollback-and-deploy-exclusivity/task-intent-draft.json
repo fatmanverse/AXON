@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "requestedOutcome": "完成定向回滚、artifact 原生回滚、部署历史制品展示与同 service 部署互斥",
+  "goal": "回滚目标真实、artifact runtime owner 不漂移、同 service 并发由数据库拒绝",
+  "successEvidence": [
+    "backend target/full tests",
+    "frontend integration/full tests",
+    "fresh migration",
+    "generated contracts"
+  ],
+  "stopCondition": "实现、契约、文档和可运行验证完成，外部环境限制明确记录",
+  "nonGoals": [
+    "deployment queue",
+    "cancel or retry",
+    "stale task manager",
+    "cross-service rollback"
+  ],
+  "scope": "backend persistence/repository/service/API/tests, frontend API/page/tests, contracts and docs",
+  "changeKinds": [
+    "contract",
+    "migration",
+    "cross-module behavior",
+    "frontend interaction"
+  ],
+  "riskHints": [
+    "database uniqueness",
+    "approval atomicity",
+    "artifact runtime ownership"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "final-verification",
+  "type": "automated-and-static-verification",
+  "source": "pytest, vitest, ruff, black, eslint, tsc/vite, alembic, openapi generation and git diff checks",
+  "summary": "Backend 608 passed excluding two sandbox-blocked gRPC bind tests; frontend 70 passed; changed-file static checks, build, fresh migration and contract generation passed.",
+  "verifier": "Codex main agent"
+}

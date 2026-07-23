@@ -236,8 +236,21 @@
         "type": "object"
       },
       "DeployRequestBody": {
-        "description": "UI 触发部署入参(§15.2 body:{version, strategy})。env 取自服务本身,不由前端传。",
+        "description": "UI 触发部署入参。version 与 artifact_id 必须且只能提供一个：\n- CI 模式：传 version（原有路径，触发外部 CI 流水线）。\n- artifact 直发模式：传 artifact_id（直接把已登记制品送上 runtime）。\nenv 取自服务本身，不由前端传。",
         "properties": {
+          "artifact_id": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "minLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Id"
+          },
           "git_sha": {
             "anyOf": [
               {
@@ -255,15 +268,19 @@
             "default": "rolling"
           },
           "version": {
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "Version",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
           }
         },
-        "required": [
-          "version"
-        ],
         "title": "DeployRequestBody",
         "type": "object"
       },
@@ -368,6 +385,26 @@
         ],
         "title": "ReloadMode",
         "type": "string"
+      },
+      "RollbackRequestBody": {
+        "description": "可选指定历史 deployment；省略时沿当前记录的 previous 链。",
+        "properties": {
+          "target_deployment_id": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "minLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Deployment Id"
+          }
+        },
+        "title": "RollbackRequestBody",
+        "type": "object"
       },
       "Runtime": {
         "enum": [
@@ -2512,7 +2549,7 @@
     },
     "/api/services/{service_id}/deploy": {
       "post": {
-        "description": "UI 触发部署(§8.1 模式 A):落 deploy task 与 deployment 记录,异步调 CI。\n\n鉴权按 service.env 判 service:{env}:deploy。task 与审计在请求会话内落库\n(先于后台任务运行),后台任务另起会话跑 DeploymentService 编排。",
+        "description": "UI 触发部署(§8.1 模式 A)：落 deploy task 与 deployment 记录，异步执行。\n\n支持两种模式（互斥，由 DeployRequestBody validator 保证）：\n- CI 模式（body.version）：触发外部 CI 流水线，需要 provider 配置。\n- artifact 直发模式（body.artifact_id）：直接把已登记制品送上 runtime，不调 CI。\n\n鉴权按 service.env 判 service:{env}:deploy。task 与审计在请求会话内落库\n（先于后台任务运行），后台任务另起会话跑 DeploymentService 编排。",
         "operationId": "deploy_service_api_services__service_id__deploy_post",
         "parameters": [
           {
@@ -2808,7 +2845,7 @@
     },
     "/api/services/{service_id}/rollback": {
       "post": {
-        "description": "一键回滚(§11.1):重部署上一版制品。与 deploy 同权限点,异步落 ROLLBACK task。\n\nprod 高危操作在审批开关开启时不直接执行,先落 pending 审批(§10.2/§13),批准后\n才由 approvals API 执行。",
+        "description": "定向回滚(§11.1):重部署指定历史版本。与 deploy 同权限点,异步落 ROLLBACK task。\n\nbody 可省略以兼容沿 current.previous 回上一版；prod 高危操作在审批开关开启时\n不直接执行,先落 pending 审批(§10.2/§13),批准后才由 approvals API 执行。",
         "operationId": "rollback_service_api_services__service_id__rollback_post",
         "parameters": [
           {
@@ -2821,6 +2858,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RollbackRequestBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {

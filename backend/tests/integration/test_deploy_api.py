@@ -20,9 +20,11 @@ from app.core.db import Database
 from app.main import create_app
 from app.models.base import Base
 from app.models.service import Runtime, ServiceEnvironment
+from app.models.task import TaskType
 from app.schemas.service import ServiceCreate
 from app.services.auth_service import AuthService
 from app.services.service_repository import ServiceRepository
+from app.services.task_repository import TaskRepository
 
 
 class _FakeAdapter(PipelineAdapter):
@@ -86,9 +88,7 @@ async def _seed_service(app, *, env=ServiceEnvironment.PROD) -> str:
 
 
 async def _token(client, username, password):
-    resp = await client.post(
-        "/api/auth/login", json={"username": username, "password": password}
-    )
+    resp = await client.post("/api/auth/login", json={"username": username, "password": password})
     return resp.json()["data"]["access_token"]
 
 
@@ -126,9 +126,7 @@ async def test_deploy_creates_deployment_record(app_client):
         json={"version": "v2.0.0"},
     )
 
-    resp = await client.get(
-        f"/api/services/{service_id}/deployments", headers=_auth(token)
-    )
+    resp = await client.get(f"/api/services/{service_id}/deployments", headers=_auth(token))
     assert resp.status_code == 200
     rows = resp.json()["data"]
     assert len(rows) == 1
@@ -166,9 +164,7 @@ async def test_developer_can_deploy_dev(app_client):
 async def test_deploy_requires_auth(app_client):
     client, _, app = app_client
     service_id = await _seed_service(app)
-    resp = await client.post(
-        f"/api/services/{service_id}/deploy", json={"version": "v1.0"}
-    )
+    resp = await client.post(f"/api/services/{service_id}/deploy", json={"version": "v1.0"})
     assert resp.status_code == 401
 
 
@@ -181,3 +177,28 @@ async def test_deploy_unknown_service_404(app_client):
         json={"version": "v1.0"},
     )
     assert resp.status_code == 404
+
+
+async def test_deploy_rejects_when_service_has_active_deployment_operation(app_client):
+    client, _, app = app_client
+    service_id = await _seed_service(app, env=ServiceEnvironment.DEV)
+    token = await _token(client, "operator", "op-pw")
+    async with app.state.db.session() as session:
+        active = await TaskRepository(session).create_deployment_operation(
+            type=TaskType.ROLLBACK,
+            service_id=service_id,
+            created_by="other-operator",
+        )
+
+    resp = await client.post(
+        f"/api/services/{service_id}/deploy",
+        headers=_auth(token),
+        json={"version": "v3.0.0"},
+    )
+
+    assert resp.status_code == 409
+    assert resp.json()["error"] == {
+        "code": "deployment_in_progress",
+        "message": "该服务已有部署或回滚任务正在执行",
+        "details": {"active_task_id": active.id},
+    }

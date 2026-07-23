@@ -42,6 +42,7 @@ from app.schemas.scan import ScanResultOut
 from app.schemas.service import (
     DeployRequestBody,
     PromoteRequestBody,
+    RollbackRequestBody,
     ServiceCreate,
     ServiceOut,
 )
@@ -488,9 +489,9 @@ async def _start_deploy(
     """
     # 审计与 task payload 按模式填写
     deploy_label = body.artifact_id or body.version
-    task = await TaskRepository(session).create(
+    task = await TaskRepository(session).create_deployment_operation(
         type=TaskType.DEPLOY,
-        target=f"service:{service.id}",
+        service_id=service.id,
         payload={"env": service.env, "version": deploy_label},
         created_by=operator,
     )
@@ -656,26 +657,36 @@ async def rollback_service(
     service_id: str,
     request: Request,
     background: BackgroundTasks,
+    body: RollbackRequestBody | None = None,
     session: AsyncSession = Depends(get_session),
     db: Database = Depends(get_database),
     provider=Depends(get_pipeline_adapter_provider),
     health_checker=Depends(get_health_checker),
+    artifact_deployer=Depends(get_artifact_deployment_service),
     user: User = Depends(get_current_user),
 ) -> dict:
-    """一键回滚(§11.1):重部署上一版制品。与 deploy 同权限点,异步落 ROLLBACK task。
+    """定向回滚(§11.1):重部署指定历史版本。与 deploy 同权限点,异步落 ROLLBACK task。
 
-    prod 高危操作在审批开关开启时不直接执行,先落 pending 审批(§10.2/§13),批准后
-    才由 approvals API 执行。
+    body 可省略以兼容沿 current.previous 回上一版；prod 高危操作在审批开关开启时
+    不直接执行,先落 pending 审批(§10.2/§13),批准后才由 approvals API 执行。
     """
     service = await ServiceRepository(session).get_service(service_id)
     _require_service_permission(user, service, TaskType.DEPLOY)
-    if provider is None:
+    _, target = await DeploymentRepository(session).resolve_rollback_target(
+        service_id,
+        env=service.env,
+        target_deployment_id=body.target_deployment_id if body else None,
+    )
+    if target.artifact_id is None and provider is None:
         raise AppError("pipeline_not_configured", "未配置 CI 适配器,无法触发回滚", status_code=503)
 
     approval_id = await _maybe_create_prod_approval(
         service=service,
         action=ApprovalAction.ROLLBACK,
-        payload={},
+        payload={
+            "target_deployment_id": target.id,
+            "artifact_id": target.artifact_id,
+        },
         request=request,
         session=session,
         user=user,
@@ -683,10 +694,13 @@ async def rollback_service(
     if approval_id is not None:
         return ok({"approval_id": approval_id, "status": "pending", "pending_approval": True})
 
-    task = await TaskRepository(session).create(
+    task = await TaskRepository(session).create_deployment_operation(
         type=TaskType.ROLLBACK,
-        target=f"service:{service_id}",
-        payload={"env": service.env},
+        service_id=service_id,
+        payload={
+            "env": service.env,
+            "target_deployment_id": target.id,
+        },
         created_by=user.username,
     )
     task_id = task.id
@@ -696,17 +710,23 @@ async def rollback_service(
         target=f"service:{service_id}",
         env=service.env,
         result=AuditResult.SUCCESS,
-        after={"task_id": task_id},
+        after={"task_id": task_id, "target_deployment_id": target.id},
         ip=request.client.host if request.client else None,
         ua=request.headers.get("user-agent"),
     )
 
-    deployer = DeploymentService(db, adapter_provider=provider, health_checker=health_checker)
+    deployer = DeploymentService(
+        db,
+        adapter_provider=provider or (lambda _service: None),
+        health_checker=health_checker,
+        artifact_deployer=artifact_deployer if target.artifact_id else None,
+    )
     background.add_task(
         deployer.run_rollback,
         task_id=task_id,
         service_id=service_id,
         operator=user.username,
+        target_deployment_id=target.id,
     )
     _notify_key_operation(
         request=request,
@@ -756,9 +776,9 @@ async def promote_service(
     if source.env == target.env:
         raise AppError("promote_same_env", "晋升的源与目标环境不能相同", status_code=400)
 
-    task = await TaskRepository(session).create(
+    task = await TaskRepository(session).create_deployment_operation(
         type=TaskType.DEPLOY,
-        target=f"service:{service_id}",
+        service_id=service_id,
         payload={"env": target.env, "promote_from": body.source_service_id},
         created_by=user.username,
     )

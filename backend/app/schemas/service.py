@@ -71,6 +71,12 @@ class DeployRequestBody(BaseModel):
         return self
 
 
+class RollbackRequestBody(BaseModel):
+    """可选指定历史 deployment；省略时沿当前记录的 previous 链。"""
+
+    target_deployment_id: str | None = Field(default=None, min_length=32, max_length=32)
+
+
 class PromoteRequestBody(BaseModel):
     """环境晋升入参(§10.3):把 source_service_id(如 staging)最近一次成功部署的
     制品晋升到当前(目标)服务。source 与目标须同名不同 env(如 billing staging→prod)。"""

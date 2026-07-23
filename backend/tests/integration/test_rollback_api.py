@@ -15,10 +15,12 @@ from app.main import create_app
 from app.models.base import Base
 from app.models.deployment import DeploymentSource, DeploymentStatus
 from app.models.service import Runtime, ServiceEnvironment
+from app.models.task import TaskType
 from app.schemas.service import ServiceCreate
 from app.services.auth_service import AuthService
 from app.services.deployment_repository import DeploymentRepository
 from app.services.service_repository import ServiceRepository
+from app.services.task_repository import TaskRepository
 
 
 class _FakeAdapter(PipelineAdapter):
@@ -30,6 +32,18 @@ class _FakeAdapter(PipelineAdapter):
 
     async def get_logs(self, ref, *, run_id):
         return "log"
+
+
+class _FakeArtifactDeployer:
+    def __init__(self) -> None:
+        self.resolve_calls = []
+        self.deploy_calls = []
+
+    async def resolve(self, service_id, artifact_id):
+        self.resolve_calls.append((service_id, artifact_id))
+
+    async def deploy(self, service_id, artifact_id):
+        self.deploy_calls.append((service_id, artifact_id))
 
 
 @pytest_asyncio.fixture
@@ -74,7 +88,15 @@ async def _seed_service(app, *, env=ServiceEnvironment.PROD) -> str:
         return svc.id
 
 
-async def _seed_success(app, service_id, *, version, artifact) -> None:
+async def _seed_success(
+    app,
+    service_id,
+    *,
+    version,
+    artifact,
+    artifact_id=None,
+    previous_deployment_id=None,
+) -> str:
     db: Database = app.state.db
     async with db.session() as session:
         repo = DeploymentRepository(session)
@@ -84,8 +106,11 @@ async def _seed_success(app, service_id, *, version, artifact) -> None:
             source=DeploymentSource.UI_TRIGGERED,
             version=version,
             artifact=artifact,
+            artifact_id=artifact_id,
+            previous_deployment_id=previous_deployment_id,
         )
         await repo.mark_status(dep.id, DeploymentStatus.SUCCESS)
+        return dep.id
 
 
 async def _token(client, username, password):
@@ -100,15 +125,103 @@ def _auth(token):
 async def test_rollback_returns_task_and_succeeds(app_client):
     client, _, app = app_client
     service_id = await _seed_service(app)
-    await _seed_success(app, service_id, version="v1", artifact="registry/app:v1")
+    target_id = await _seed_success(app, service_id, version="v1", artifact="registry/app:v1")
+    await _seed_success(
+        app,
+        service_id,
+        version="v2",
+        artifact="registry/app:v2",
+        previous_deployment_id=target_id,
+    )
     token = await _token(client, "operator", "op-pw")
 
-    resp = await client.post(f"/api/services/{service_id}/rollback", headers=_auth(token))
+    resp = await client.post(
+        f"/api/services/{service_id}/rollback",
+        headers=_auth(token),
+        json={"target_deployment_id": target_id},
+    )
     assert resp.status_code == 202
     task_id = resp.json()["data"]["task_id"]
 
     got = await client.get(f"/api/tasks/{task_id}", headers=_auth(token))
     assert got.json()["data"]["status"] == "success"
+    async with app.state.db.session() as session:
+        task = await TaskRepository(session).get(task_id)
+        assert task.payload["target_deployment_id"] == target_id
+
+
+async def test_rollback_without_body_uses_previous_deployment(app_client):
+    client, _, app = app_client
+    service_id = await _seed_service(app)
+    target_id = await _seed_success(app, service_id, version="v1", artifact="registry/app:v1")
+    await _seed_success(
+        app,
+        service_id,
+        version="v2",
+        artifact="registry/app:v2",
+        previous_deployment_id=target_id,
+    )
+    token = await _token(client, "operator", "op-pw")
+
+    resp = await client.post(f"/api/services/{service_id}/rollback", headers=_auth(token))
+
+    assert resp.status_code == 202
+    async with app.state.db.session() as session:
+        task = await TaskRepository(session).get(resp.json()["data"]["task_id"])
+        assert task.payload["target_deployment_id"] == target_id
+
+
+async def test_rollback_rejects_current_as_explicit_target(app_client):
+    client, _, app = app_client
+    service_id = await _seed_service(app)
+    current_id = await _seed_success(app, service_id, version="v2", artifact="registry/app:v2")
+    token = await _token(client, "operator", "op-pw")
+
+    resp = await client.post(
+        f"/api/services/{service_id}/rollback",
+        headers=_auth(token),
+        json={"target_deployment_id": current_id},
+    )
+
+    assert resp.status_code == 409
+    assert resp.json()["error"]["code"] == "rollback_target_is_current"
+
+
+async def test_artifact_rollback_does_not_require_pipeline_provider(app_client):
+    client, _, app = app_client
+    service_id = await _seed_service(app)
+    artifact_id = "a" * 32
+    target_id = await _seed_success(
+        app,
+        service_id,
+        version="v1",
+        artifact="registry/app:v1",
+        artifact_id=artifact_id,
+    )
+    await _seed_success(
+        app,
+        service_id,
+        version="v2",
+        artifact="registry/app:v2",
+        previous_deployment_id=target_id,
+    )
+    fake_deployer = _FakeArtifactDeployer()
+    app.state.pipeline_adapter_provider = None
+    app.state.artifact_deployment_service = fake_deployer
+    token = await _token(client, "operator", "op-pw")
+
+    resp = await client.post(
+        f"/api/services/{service_id}/rollback",
+        headers=_auth(token),
+        json={"target_deployment_id": target_id},
+    )
+
+    assert resp.status_code == 202
+    task_id = resp.json()["data"]["task_id"]
+    task = await client.get(f"/api/tasks/{task_id}", headers=_auth(token))
+    assert task.json()["data"]["status"] == "success"
+    assert fake_deployer.resolve_calls == [(service_id, artifact_id)]
+    assert fake_deployer.deploy_calls == [(service_id, artifact_id)]
 
 
 async def test_rollback_forbidden_for_developer_on_prod(app_client):
@@ -133,3 +246,29 @@ async def test_rollback_unknown_service_404(app_client):
     token = await _token(client, "operator", "op-pw")
     resp = await client.post("/api/services/" + "0" * 32 + "/rollback", headers=_auth(token))
     assert resp.status_code == 404
+
+
+async def test_rollback_rejects_when_service_has_active_deployment_operation(app_client):
+    client, _, app = app_client
+    service_id = await _seed_service(app)
+    target_id = await _seed_success(app, service_id, version="v1", artifact="registry/app:v1")
+    await _seed_success(
+        app,
+        service_id,
+        version="v2",
+        artifact="registry/app:v2",
+        previous_deployment_id=target_id,
+    )
+    token = await _token(client, "operator", "op-pw")
+    async with app.state.db.session() as session:
+        active = await TaskRepository(session).create_deployment_operation(
+            type=TaskType.DEPLOY,
+            service_id=service_id,
+            created_by="other-operator",
+        )
+
+    resp = await client.post(f"/api/services/{service_id}/rollback", headers=_auth(token))
+
+    assert resp.status_code == 409
+    assert resp.json()["error"]["code"] == "deployment_in_progress"
+    assert resp.json()["error"]["details"] == {"active_task_id": active.id}

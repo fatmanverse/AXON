@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-07-23-targeted-rollback-and-deploy-exclusivity",
+  "taskIntentRef": "docs/aegis/work/2026-07-23-targeted-rollback-and-deploy-exclusivity/task-intent-draft.json",
+  "baselineRefs": [
+    "docs/aegis/baseline/2026-07-20-initial-baseline.md",
+    "docs/aegis/specs/2026-07-20-artifact-direct-deployment-design.md",
+    "docs/aegis/specs/2026-07-23-targeted-rollback-and-deploy-exclusivity-design.md"
+  ],
+  "scopeStatus": "verified-with-environment-exceptions",
+  "compatStatus": "verified",
+  "retirementStatus": "verified",
+  "newRiskSignals": [
+    "stale active tasks intentionally block later deployment operations"
+  ],
+  "decision": "continue"
+}

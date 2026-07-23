@@ -1,21 +1,21 @@
 /**
  * 部署与配置页集成测试(T2.8)。
- * mock /api/services、/api/services/{id}/deployments、/configs 契约,验证:
- * 部署历史渲染、一键回滚走 task 轮询、配置版本列表、新建版本、切换生效版。
+ * mock /api/services、/api/services/{id}/deployments 契约,验证:
+ * 制品展示、历史行定向回滚、审批短路与 task 终态回显。
  * 不触真实后端。
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import MockAdapter from "axios-mock-adapter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ConfigProvider } from "antd";
+import { ConfigProvider, message } from "antd";
 
 import { DeploymentsPage } from "@/pages/DeploymentsPage";
 import { http } from "@/api/client";
 import type { Service } from "@/api/services";
-import type { ConfigVersion, Deployment } from "@/api/deployments";
+import type { Deployment } from "@/api/deployments";
 
 let mock: MockAdapter;
 
@@ -47,88 +47,145 @@ const SVC: Service = {
   placement_count: 1,
 };
 
-const DEP: Deployment = {
-  id: "dep1",
+const CURRENT: Deployment = {
+  id: "dep-current",
   service_id: "svc1",
   env: "dev",
   git_sha: "abc123",
-  version: "v1.2.0",
-  artifact: "registry/app:v1.2.0",
+  version: "v3.0.0",
+  artifact: "registry/app:v3.0.0",
+  artifact_id: "cccccccccccccccccccccccccccccccc",
   strategy: "rolling",
   source: "ui-triggered",
   pipeline_id: "pipe-1",
   pipeline_url: null,
   operator: "alice",
   status: "success",
-  previous_deployment_id: null,
+  previous_deployment_id: "dep-artifact",
   scan_result_id: null,
   started_at: "2026-07-11T12:00:00+00:00",
   finished_at: "2026-07-11T12:05:00+00:00",
 };
 
-const CFG_V2: ConfigVersion = {
-  id: "c2",
-  service_id: "svc1",
-  version: 2,
-  content: "A=2",
-  format: "env",
-  created_by: "alice",
-  comment: "bump",
-  target_path: null,
-  is_current: true,
-  created_at: "2026-07-11T12:00:00+00:00",
+const TARGET_ARTIFACT: Deployment = {
+  ...CURRENT,
+  id: "dep-artifact",
+  version: "v2.0.0",
+  artifact: "registry/app:v2.0.0",
+  artifact_id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  status: "rolled_back",
+  previous_deployment_id: "dep-ci",
+  started_at: "2026-07-10T12:00:00+00:00",
 };
 
-const CFG_V1: ConfigVersion = {
-  id: "c1",
-  service_id: "svc1",
-  version: 1,
-  content: "A=1",
-  format: "env",
-  created_by: "alice",
-  comment: "init",
-  target_path: null,
-  is_current: false,
-  created_at: "2026-07-11T11:00:00+00:00",
+const TARGET_CI: Deployment = {
+  ...CURRENT,
+  id: "dep-ci",
+  version: "v1.0.0",
+  artifact: "registry/app:v1.0.0",
+  artifact_id: null,
+  status: "success",
+  previous_deployment_id: null,
+  started_at: "2026-07-09T12:00:00+00:00",
 };
 
 beforeEach(() => {
   mock = new MockAdapter(http);
   mock.onGet("/api/services").reply(200, ok([SVC]));
-  mock.onGet("/api/services/svc1/deployments").reply(200, ok([DEP]));
-  mock.onGet("/api/services/svc1/configs").reply(200, ok([CFG_V2, CFG_V1]));
-  mock.onGet("/api/services/svc1/configs/current").reply(200, ok(CFG_V2));
+  mock
+    .onGet("/api/services/svc1/deployments")
+    .reply(200, ok([CURRENT, TARGET_ARTIFACT, TARGET_CI]));
 });
 
 afterEach(() => {
+  message.destroy();
   mock.restore();
 });
 
 describe("DeploymentsPage", () => {
-  it("选中服务后渲染部署历史", async () => {
+  it("展示 artifact 摘要且仅较早成功历史提供回滚操作", async () => {
     renderPage();
-    // 服务列表加载后自动选中第一个,拉出部署记录
-    expect(await screen.findByText("v1.2.0")).toBeInTheDocument();
-    expect(screen.getByText("alice")).toBeInTheDocument();
-    expect(screen.getByText("成功")).toBeInTheDocument();
+    expect(await screen.findByText("v3.0.0")).toBeInTheDocument();
+    expect(screen.getAllByText("alice")).toHaveLength(3);
+    expect(screen.getByText("aaaaaaaa…")).toBeInTheDocument();
+    expect(screen.getByText("registry/app:v1.0.0")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "一键回滚" })).not.toBeInTheDocument();
+
+    const currentRow = screen.getByText("v3.0.0").closest("tr")!;
+    const artifactRow = screen.getByText("v2.0.0").closest("tr")!;
+    expect(
+      within(currentRow).queryByRole("button", { name: "回滚到此版本" }),
+    ).not.toBeInTheDocument();
+    expect(within(artifactRow).getByRole("button", { name: "回滚到此版本" })).toBeInTheDocument();
   });
 
-  it("一键回滚走二次确认并调用回滚端点+轮询 task", async () => {
+  it("详情展示完整 artifact_id 与 URI", async () => {
+    mock
+      .onGet("/api/services/svc1/deployments/dep-artifact")
+      .reply(200, ok({ deployment: TARGET_ARTIFACT, scans: [] }));
+    const user = userEvent.setup();
+    renderPage();
+    const row = (await screen.findByText("v2.0.0")).closest("tr")!;
+
+    await user.click(within(row).getByRole("button", { name: "查看详情" }));
+
+    expect(await screen.findByText("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")).toBeInTheDocument();
+    expect(screen.getAllByText("registry/app:v2.0.0").length).toBeGreaterThan(0);
+  });
+
+  it("确认指定历史版本后提交 target_deployment_id 并轮询成功", async () => {
     mock.onPost("/api/services/svc1/rollback").reply(202, ok({ task_id: "t1", status: "pending" }));
     mock.onGet("/api/tasks/t1").reply(200, ok({ id: "t1", status: "success" }));
 
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("v1.2.0");
+    const row = (await screen.findByText("v2.0.0")).closest("tr")!;
 
-    await user.click(screen.getByRole("button", { name: /一\s*键\s*回\s*滚|一键回滚/ }));
-    // Popconfirm 弹出确认按钮
-    const confirm = await screen.findByRole("button", { name: /^回\s*滚$/ });
+    await user.click(within(row).getByRole("button", { name: "回滚到此版本" }));
+    expect(await screen.findByText("确认回滚到此版本")).toBeInTheDocument();
+    expect(screen.getAllByText(/billing.*dev/).length).toBeGreaterThan(1);
+    expect(screen.getAllByText("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").length).toBeGreaterThan(0);
+    const confirm = screen.getByRole("button", { name: "确认回滚" });
     await user.click(confirm);
 
     await waitFor(() => {
-      expect(mock.history.post.some((r) => r.url === "/api/services/svc1/rollback")).toBe(true);
+      const request = mock.history.post.find((r) => r.url === "/api/services/svc1/rollback");
+      expect(JSON.parse(request?.data as string)).toEqual({
+        target_deployment_id: "dep-artifact",
+      });
     });
+    expect(await screen.findByText("回滚成功")).toBeInTheDocument();
+  });
+
+  it("回滚进入审批时不轮询 task", async () => {
+    mock
+      .onPost("/api/services/svc1/rollback")
+      .reply(202, ok({ approval_id: "ap-rb", status: "pending", pending_approval: true }));
+    const user = userEvent.setup();
+    renderPage();
+    const row = (await screen.findByText("v1.0.0")).closest("tr")!;
+
+    await user.click(within(row).getByRole("button", { name: "回滚到此版本" }));
+    await user.click(await screen.findByRole("button", { name: "确认回滚" }));
+
+    expect(await screen.findByText(/已提交审批/)).toBeInTheDocument();
+    expect(mock.history.get.some((r) => (r.url ?? "").startsWith("/api/tasks"))).toBe(false);
+  });
+
+  it.each([
+    ["failed", "回滚失败:runtime down"],
+    ["unknown", "回滚状态未知,请稍后核对"],
+  ])("回滚 task %s 时显示对应终态", async (status, expected) => {
+    mock.onPost("/api/services/svc1/rollback").reply(202, ok({ task_id: "t2", status: "pending" }));
+    mock.onGet("/api/tasks/t2").reply(200, ok({ id: "t2", status, error: "runtime down" }));
+    const user = userEvent.setup();
+    renderPage();
+    const row = (await screen.findByText("v1.0.0")).closest("tr")!;
+
+    await user.click(within(row).getByRole("button", { name: "回滚到此版本" }));
+    await user.click(await screen.findByRole("button", { name: "确认回滚" }));
+
+    expect(await screen.findByText(expected)).toBeInTheDocument();
   });
 
   it("prod 部署落 pending 审批时提示已进入审批,不轮询 task", async () => {
@@ -140,7 +197,7 @@ describe("DeploymentsPage", () => {
 
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("v1.2.0");
+    await screen.findByText("v3.0.0");
 
     await user.click(screen.getByRole("button", { name: /触\s*发\s*部\s*署/ }));
     await user.type(await screen.findByPlaceholderText("如 v1.2.3"), "v9.9.9");

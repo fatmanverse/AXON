@@ -28,6 +28,7 @@ frontend/dist/
 # Local scratch
 /tmp/
 .tmp/
+.worktrees/
 *.db
 .backups/
 

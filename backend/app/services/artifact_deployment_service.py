@@ -97,9 +97,7 @@ class ArtifactDeploymentService:
         self._transfer_factory: TransferFactory = (
             transfer_factory or build_artifact_transfer_for_server
         )
-        self._executor_factory: ExecutorFactory = (
-            executor_factory or build_executor_for_server
-        )
+        self._executor_factory: ExecutorFactory = executor_factory or build_executor_for_server
 
     # ── 公开 API ──────────────────────────────────────────────────────────
 
@@ -156,9 +154,7 @@ class ArtifactDeploymentService:
             servers: list[Server | None] = []
             for placement in placements:
                 server = (
-                    await server_repo.find(placement.server_id)
-                    if placement.server_id
-                    else None
+                    await server_repo.find(placement.server_id) if placement.server_id else None
                 )
                 servers.append(server)
 
@@ -198,9 +194,7 @@ class ArtifactDeploymentService:
         cleanup 失败只记 warning，不覆盖部署成功结论。
         """
         remote_path = f"{_REMOTE_TMP_DIR}/{deploy_input.artifact_id}.tar.gz"
-        transfer = self._transfer_factory(
-            server, self._secrets, connector=self._connector
-        )
+        transfer = self._transfer_factory(server, self._secrets, connector=self._connector)
         executor = self._build_executor(server)
 
         upload_ok = False
@@ -225,9 +219,7 @@ class ArtifactDeploymentService:
         runtime_ref: dict[str, Any],
     ) -> None:
         """逐 placement 顺序部署 Docker 镜像；首个失败停止后续。"""
-        env: dict[str, str] = {
-            str(k): str(v) for k, v in (runtime_ref.get("env") or {}).items()
-        }
+        env: dict[str, str] = {str(k): str(v) for k, v in (runtime_ref.get("env") or {}).items()}
         ports: list[str] = [str(p) for p in (runtime_ref.get("ports") or [])]
         spec = DeploySpec(
             artifact=deploy_input.uri,
@@ -295,15 +287,11 @@ class ArtifactDeploymentService:
 # ── 模块级纯函数 ──────────────────────────────────────────────────────────
 
 
-def _check_type_runtime_compat(
-    registry_type: ArtifactRegistryType, runtime: Runtime
-) -> None:
+def _check_type_runtime_compat(registry_type: ArtifactRegistryType, runtime: Runtime) -> None:
     """校验制品类型与 runtime 是否兼容；不兼容抛 409。"""
     compatible = (
         registry_type == ArtifactRegistryType.GENERIC and runtime in _GENERIC_RUNTIMES
-    ) or (
-        registry_type == ArtifactRegistryType.DOCKER and runtime in _DOCKER_RUNTIMES
-    )
+    ) or (registry_type == ArtifactRegistryType.DOCKER and runtime in _DOCKER_RUNTIMES)
     if not compatible:
         raise AppError(
             "artifact_runtime_mismatch",

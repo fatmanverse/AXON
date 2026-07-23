@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "baselineRefs": [
+    "docs/aegis/baseline/2026-07-20-initial-baseline.md",
+    "docs/aegis/specs/2026-07-20-artifact-direct-deployment-design.md",
+    "docs/aegis/specs/2026-07-23-targeted-rollback-and-deploy-exclusivity-design.md"
+  ],
+  "impactStatement": "docs/aegis/work/2026-07-23-targeted-rollback-and-deploy-exclusivity/impact-statement-draft.json",
+  "compatPlan": "rollback without body follows current.previous_deployment_id; CI, webhook, lifecycle, build and config contracts remain compatible",
+  "retirementPlan": "verified",
+  "evidenceBundle": [
+    "docs/aegis/work/2026-07-23-targeted-rollback-and-deploy-exclusivity/evidence-bundle-draft-final.json"
+  ]
+}

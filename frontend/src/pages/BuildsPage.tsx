@@ -16,6 +16,7 @@ import {
   Card,
   Descriptions,
   Empty,
+  Modal,
   Result,
   Segmented,
   Select,
@@ -38,6 +39,8 @@ import {
   listBuilds,
   triggerBuild,
 } from "@/api/builds";
+import { deployService, isPendingApproval } from "@/api/deployments";
+import type { Service } from "@/api/services";
 import { pollTaskUntilDone } from "@/api/taskPolling";
 import { DetailModal } from "@/components/DetailModal";
 import { FormModal } from "@/components/FormModal";
@@ -136,8 +139,7 @@ function BuildsTab({ serviceId }: { serviceId: string }): React.ReactElement {
       dataIndex: "git_sha",
       key: "git_sha",
       width: 120,
-      render: (v: string | null) =>
-        v ? <code>{v.slice(0, 12)}</code> : <Muted />,
+      render: (v: string | null) => (v ? <code>{v.slice(0, 12)}</code> : <Muted />),
     },
     {
       title: "操作人",
@@ -149,8 +151,7 @@ function BuildsTab({ serviceId }: { serviceId: string }): React.ReactElement {
       title: "开始时间",
       dataIndex: "started_at",
       key: "started_at",
-      render: (t: string | null) =>
-        t ? new Date(t).toLocaleString("zh-CN") : <Muted />,
+      render: (t: string | null) => (t ? new Date(t).toLocaleString("zh-CN") : <Muted />),
     },
     {
       title: "详情",
@@ -233,18 +234,12 @@ function BuildsTab({ serviceId }: { serviceId: string }): React.ReactElement {
                 {BUILD_STATUS[detail.status].label}
               </Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="仓库">
-              {detail.repo_url ?? <Muted />}
-            </Descriptions.Item>
-            <Descriptions.Item label="Git 引用">
-              {detail.git_ref ?? <Muted />}
-            </Descriptions.Item>
+            <Descriptions.Item label="仓库">{detail.repo_url ?? <Muted />}</Descriptions.Item>
+            <Descriptions.Item label="Git 引用">{detail.git_ref ?? <Muted />}</Descriptions.Item>
             <Descriptions.Item label="git_sha">
               {detail.git_sha ? <code>{detail.git_sha}</code> : <Muted />}
             </Descriptions.Item>
-            <Descriptions.Item label="版本">
-              {detail.version ?? <Muted />}
-            </Descriptions.Item>
+            <Descriptions.Item label="版本">{detail.version ?? <Muted />}</Descriptions.Item>
             <Descriptions.Item label="错误">
               {detail.error ? (
                 <span style={{ color: colors.danger }}>{detail.error}</span>
@@ -259,11 +254,66 @@ function BuildsTab({ serviceId }: { serviceId: string }): React.ReactElement {
   );
 }
 
-function ArtifactsTab({ serviceId }: { serviceId: string }): React.ReactElement {
+function ArtifactsTab({ service }: { service: Service }): React.ReactElement {
+  const serviceId = service.id;
+  const queryClient = useQueryClient();
+  const [deployingId, setDeployingId] = useState<string | null>(null);
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["artifacts", serviceId],
     queryFn: () => listArtifacts(serviceId),
   });
+
+  const handleDeploy = (artifact: Artifact): void => {
+    Modal.confirm({
+      title: "部署制品",
+      width: 520,
+      content: (
+        <Descriptions column={1} size="small" style={{ marginTop: 12 }}>
+          <Descriptions.Item label="服务">{service.name}</Descriptions.Item>
+          <Descriptions.Item label="环境">{service.env}</Descriptions.Item>
+          <Descriptions.Item label="运行时">{service.runtime}</Descriptions.Item>
+          <Descriptions.Item label="制品">{artifact.name}</Descriptions.Item>
+          <Descriptions.Item label="版本">{artifact.version ?? "-"}</Descriptions.Item>
+          <Descriptions.Item label="地址">
+            <code>{artifact.uri}</code>
+          </Descriptions.Item>
+        </Descriptions>
+      ),
+      okText: "确认部署",
+      cancelText: "取消",
+      onOk: async () => {
+        setDeployingId(artifact.id);
+        const hide = message.loading("制品部署中…", 0);
+        try {
+          const result = await deployService(serviceId, {
+            artifact_id: artifact.id,
+            strategy: "rolling",
+          });
+          if (isPendingApproval(result)) {
+            hide();
+            message.info("已进入审批流程，待审批人批准后执行");
+            return;
+          }
+          const task = await pollTaskUntilDone(result.task_id, { timeoutMs: 60_000 });
+          hide();
+          if (task.status === "success") {
+            message.success("制品部署成功");
+          } else if (task.status === "failed") {
+            message.error(`制品部署失败:${task.error ?? "未知错误"}`);
+          } else {
+            message.warning("制品部署状态未知,请稍后刷新核对");
+          }
+          void queryClient.invalidateQueries({ queryKey: ["artifacts", serviceId] });
+          void queryClient.invalidateQueries({ queryKey: ["deployments", serviceId] });
+        } catch (err) {
+          hide();
+          message.error(err instanceof ApiError ? err.message : "制品部署请求失败");
+        } finally {
+          setDeployingId(null);
+        }
+      },
+    });
+  };
 
   const columns: ColumnsType<Artifact> = [
     { title: "名称", dataIndex: "name", key: "name" },
@@ -284,8 +334,7 @@ function ArtifactsTab({ serviceId }: { serviceId: string }): React.ReactElement 
       dataIndex: "digest",
       key: "digest",
       width: 140,
-      render: (d: string | null) =>
-        d ? <code>{d.slice(0, 19)}</code> : <Muted />,
+      render: (d: string | null) => (d ? <code>{d.slice(0, 19)}</code> : <Muted />),
     },
     {
       title: "大小",
@@ -293,6 +342,22 @@ function ArtifactsTab({ serviceId }: { serviceId: string }): React.ReactElement 
       key: "size_bytes",
       width: 90,
       render: (b: number | null) => formatSize(b),
+    },
+    {
+      title: "操作",
+      key: "action",
+      width: 80,
+      render: (_: unknown, record: Artifact) => (
+        <Button
+          aria-label={`部署制品 ${record.name}`}
+          size="small"
+          type="primary"
+          loading={deployingId === record.id}
+          onClick={() => handleDeploy(record)}
+        >
+          部署
+        </Button>
+      ),
     },
   ];
 
@@ -330,7 +395,11 @@ export function BuildsPage(): React.ReactElement {
   const [serviceId, setServiceId] = useState<string | undefined>();
   const [tab, setTab] = useState<BuildTab>("builds");
 
-  const { data: services, isLoading, error } = useQuery({
+  const {
+    data: services,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["services"],
     queryFn: () => listServices(),
   });
@@ -381,7 +450,7 @@ export function BuildsPage(): React.ReactElement {
           {tab === "builds" ? (
             <BuildsTab serviceId={selected.id} />
           ) : (
-            <ArtifactsTab serviceId={selected.id} />
+            <ArtifactsTab service={selected} />
           )}
         </>
       ) : (

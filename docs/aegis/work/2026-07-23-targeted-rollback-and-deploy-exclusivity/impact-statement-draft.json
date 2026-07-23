@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "affectedLayers": [
+    "database migration",
+    "task and deployment repositories",
+    "deployment orchestration",
+    "services and approvals API",
+    "deployment history UI",
+    "generated contract"
+  ],
+  "owners": [
+    "TaskRepository plus database index for exclusivity",
+    "DeploymentRepository and DeploymentService for rollback target and state",
+    "ArtifactDeploymentService for artifact runtime execution"
+  ],
+  "invariants": [
+    "one active deploy or rollback task per service",
+    "rollback target is a same-service same-env historical deployment snapshot",
+    "failed rollback does not mark current deployment rolled_back"
+  ],
+  "compatBoundary": "rollback without body follows current.previous_deployment_id; CI, webhook, lifecycle, build and config contracts remain compatible",
+  "nonGoals": [
+    "queueing",
+    "automatic stale-task cleanup",
+    "cross-environment rollback"
+  ]
+}

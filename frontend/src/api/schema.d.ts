@@ -595,10 +595,14 @@ export interface paths {
         put?: never;
         /**
          * Deploy Service
-         * @description UI 触发部署(§8.1 模式 A):落 deploy task 与 deployment 记录,异步调 CI。
+         * @description UI 触发部署(§8.1 模式 A)：落 deploy task 与 deployment 记录，异步执行。
+         *
+         *     支持两种模式（互斥，由 DeployRequestBody validator 保证）：
+         *     - CI 模式（body.version）：触发外部 CI 流水线，需要 provider 配置。
+         *     - artifact 直发模式（body.artifact_id）：直接把已登记制品送上 runtime，不调 CI。
          *
          *     鉴权按 service.env 判 service:{env}:deploy。task 与审计在请求会话内落库
-         *     (先于后台任务运行),后台任务另起会话跑 DeploymentService 编排。
+         *     （先于后台任务运行），后台任务另起会话跑 DeploymentService 编排。
          */
         post: operations["deploy_service_api_services__service_id__deploy_post"];
         delete?: never;
@@ -702,10 +706,10 @@ export interface paths {
         put?: never;
         /**
          * Rollback Service
-         * @description 一键回滚(§11.1):重部署上一版制品。与 deploy 同权限点,异步落 ROLLBACK task。
+         * @description 定向回滚(§11.1):重部署指定历史版本。与 deploy 同权限点,异步落 ROLLBACK task。
          *
-         *     prod 高危操作在审批开关开启时不直接执行,先落 pending 审批(§10.2/§13),批准后
-         *     才由 approvals API 执行。
+         *     body 可省略以兼容沿 current.previous 回上一版；prod 高危操作在审批开关开启时
+         *     不直接执行,先落 pending 审批(§10.2/§13),批准后才由 approvals API 执行。
          */
         post: operations["rollback_service_api_services__service_id__rollback_post"];
         delete?: never;
@@ -953,15 +957,20 @@ export interface components {
         };
         /**
          * DeployRequestBody
-         * @description UI 触发部署入参(§15.2 body:{version, strategy})。env 取自服务本身,不由前端传。
+         * @description UI 触发部署入参。version 与 artifact_id 必须且只能提供一个：
+         *     - CI 模式：传 version（原有路径，触发外部 CI 流水线）。
+         *     - artifact 直发模式：传 artifact_id（直接把已登记制品送上 runtime）。
+         *     env 取自服务本身，不由前端传。
          */
         DeployRequestBody: {
+            /** Artifact Id */
+            artifact_id?: string | null;
             /** Git Sha */
             git_sha?: string | null;
             /** @default rolling */
             strategy: components["schemas"]["DeploymentStrategy"];
             /** Version */
-            version: string;
+            version?: string | null;
         };
         /**
          * DeploymentStrategy
@@ -1017,6 +1026,14 @@ export interface components {
          * @enum {string}
          */
         ReloadMode: "reload" | "restart";
+        /**
+         * RollbackRequestBody
+         * @description 可选指定历史 deployment；省略时沿当前记录的 previous 链。
+         */
+        RollbackRequestBody: {
+            /** Target Deployment Id */
+            target_deployment_id?: string | null;
+        };
         /**
          * Runtime
          * @enum {string}
@@ -2506,7 +2523,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RollbackRequestBody"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             202: {

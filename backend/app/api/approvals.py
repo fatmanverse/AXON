@@ -129,12 +129,22 @@ async def approve(
     ):
         raise AppError("pipeline_not_configured", "未配置 CI 流水线,无法执行", status_code=501)
 
-    task = await TaskRepository(session).create(
-        type=task_type,
-        target=f"service:{approval.service_id}",
-        payload={"env": approval.env, "approval_id": approval_id, **payload},
-        created_by=user.username,
-    )
+    task_repo = TaskRepository(session)
+    task_payload = {"env": approval.env, "approval_id": approval_id, **payload}
+    if task_type in {TaskType.DEPLOY, TaskType.ROLLBACK}:
+        task = await task_repo.create_deployment_operation(
+            type=task_type,
+            service_id=approval.service_id,
+            payload=task_payload,
+            created_by=user.username,
+        )
+    else:
+        task = await task_repo.create(
+            type=task_type,
+            target=f"service:{approval.service_id}",
+            payload=task_payload,
+            created_by=user.username,
+        )
     task_id = task.id
     await ApprovalRepository(session).approve(
         approval_id, decided_by=user.username, task_id=task_id
@@ -181,6 +191,7 @@ async def approve(
                 task_id=task_id,
                 service_id=approval.service_id,
                 operator=operator,
+                target_deployment_id=payload.get("target_deployment_id"),
             )
         else:
             strategy = DeploymentStrategy(payload.get("strategy", DeploymentStrategy.ROLLING.value))

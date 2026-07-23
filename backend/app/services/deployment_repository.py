@@ -138,6 +138,79 @@ class DeploymentRepository:
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def resolve_rollback_target(
+        self,
+        service_id: str,
+        *,
+        env: str,
+        target_deployment_id: str | None = None,
+    ) -> tuple[Deployment, Deployment]:
+        """返回回滚前 current 与已校验 target，兼容沿 previous 链的旧调用。"""
+        current = await self.latest_successful(service_id, env=env)
+        if current is None:
+            raise AppError("no_rollback_target", "无可回滚的当前成功部署", status_code=409)
+
+        explicit = target_deployment_id is not None
+        resolved_id = target_deployment_id or current.previous_deployment_id
+        if resolved_id is None:
+            raise AppError("no_rollback_target", "当前部署没有上一版本", status_code=409)
+
+        target = await self._session.get(Deployment, resolved_id)
+        if target is None:
+            if explicit:
+                raise AppError(
+                    "rollback_target_not_found",
+                    "指定的回滚目标不存在",
+                    status_code=404,
+                )
+            raise AppError("no_rollback_target", "上一版本部署记录不存在", status_code=409)
+
+        error = self._rollback_target_error(
+            current=current,
+            target=target,
+            service_id=service_id,
+            env=env,
+        )
+        if error is not None:
+            if explicit:
+                raise error
+            raise AppError("no_rollback_target", "上一版本部署记录不可回滚", status_code=409)
+        return current, target
+
+    @staticmethod
+    def _rollback_target_error(
+        *,
+        current: Deployment,
+        target: Deployment,
+        service_id: str,
+        env: str,
+    ) -> AppError | None:
+        if target.service_id != service_id or target.env != env:
+            return AppError(
+                "rollback_target_mismatch",
+                "回滚目标不属于当前服务和环境",
+                status_code=409,
+            )
+        if target.id == current.id:
+            return AppError(
+                "rollback_target_is_current",
+                "回滚目标不能是当前版本",
+                status_code=409,
+            )
+        if target.status not in {DeploymentStatus.SUCCESS, DeploymentStatus.ROLLED_BACK}:
+            return AppError(
+                "rollback_target_invalid",
+                "回滚目标不是成功的历史部署",
+                status_code=409,
+            )
+        if target.artifact_id is None and not target.version:
+            return AppError(
+                "rollback_target_invalid",
+                "CI 回滚目标缺少版本信息",
+                status_code=409,
+            )
+        return None
+
     async def find_by_idempotency(
         self, *, pipeline_id: str, service_id: str, env: str
     ) -> Deployment | None:

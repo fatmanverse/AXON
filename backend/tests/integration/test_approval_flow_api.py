@@ -20,10 +20,14 @@ from app.adapters.pipeline import PipelineAdapter, PipelineRunStatus
 from app.core.config import Settings
 from app.core.db import Database
 from app.main import create_app
+from app.models.approval import ApprovalStatus
 from app.models.base import Base
+from app.models.task import TaskType
 from app.schemas.environment import EnvironmentCreate
+from app.services.approval_repository import ApprovalRepository
 from app.services.auth_service import AuthService
 from app.services.environment_repository import EnvironmentRepository
+from app.services.task_repository import TaskRepository
 
 
 class _FakeAdapter(PipelineAdapter):
@@ -35,6 +39,18 @@ class _FakeAdapter(PipelineAdapter):
 
     async def get_logs(self, ref: str, *, run_id: str) -> str:
         return "log"
+
+
+class _FakeArtifactDeployer:
+    def __init__(self) -> None:
+        self.resolve_calls = []
+        self.deploy_calls = []
+
+    async def resolve(self, service_id, artifact_id):
+        self.resolve_calls.append((service_id, artifact_id))
+
+    async def deploy(self, service_id, artifact_id):
+        self.deploy_calls.append((service_id, artifact_id))
 
 
 @pytest_asyncio.fixture
@@ -68,9 +84,7 @@ async def app_client(tmp_path):
                 env_repo = EnvironmentRepository(session)
                 await env_repo.create(EnvironmentCreate(name="dev"))
                 await env_repo.create(EnvironmentCreate(name="staging"))
-                await env_repo.create(
-                    EnvironmentCreate(name="prod", requires_approval=True)
-                )
+                await env_repo.create(EnvironmentCreate(name="prod", requires_approval=True))
             yield client, settings, app
 
 
@@ -228,7 +242,14 @@ async def test_cannot_approve_own_request(app_client):
     assert resp.status_code == 403
 
 
-async def _seed_success_deployment(app, service_id):
+async def _seed_success_deployment(
+    app,
+    service_id,
+    *,
+    version="v1",
+    artifact_id=None,
+    previous_deployment_id=None,
+):
     """给服务留一版成功部署,供 rollback 取制品。"""
     from app.models.deployment import DeploymentSource, DeploymentStatus
     from app.services.deployment_repository import DeploymentRepository
@@ -240,10 +261,13 @@ async def _seed_success_deployment(app, service_id):
             service_id=service_id,
             env="prod",
             source=DeploymentSource.UI_TRIGGERED,
-            version="v1",
-            artifact="registry/app:v1",
+            version=version,
+            artifact=f"registry/app:{version}",
+            artifact_id=artifact_id,
+            previous_deployment_id=previous_deployment_id,
         )
         await repo.mark_status(dep.id, DeploymentStatus.SUCCESS)
+        return dep.id
 
 
 async def test_prod_rollback_creates_pending_approval(app_client):
@@ -251,15 +275,28 @@ async def test_prod_rollback_creates_pending_approval(app_client):
     client, _, app = app_client
     op = await _token(client, "operator", "op-pw")
     service_id = await _create_service(client, op, "billing", "prod")
-    await _seed_success_deployment(app, service_id)
+    target_id = await _seed_success_deployment(app, service_id)
+    await _seed_success_deployment(
+        app,
+        service_id,
+        version="v2",
+        previous_deployment_id=target_id,
+    )
 
-    resp = await client.post(f"/api/services/{service_id}/rollback", headers=_auth(op))
+    resp = await client.post(
+        f"/api/services/{service_id}/rollback",
+        headers=_auth(op),
+        json={"target_deployment_id": target_id},
+    )
     assert resp.status_code == 202
     body = resp.json()["data"]
     assert body["pending_approval"] is True
     assert body["approval_id"]
     # 未直接建 rollback task(返回的是审批而非 task_id)
     assert "task_id" not in body
+    async with app.state.db.session() as session:
+        approval = await ApprovalRepository(session).get(body["approval_id"])
+        assert approval.payload["target_deployment_id"] == target_id
 
 
 async def test_prod_delete_creates_pending_approval(app_client):
@@ -281,9 +318,19 @@ async def test_approve_rollback_dispatches_execution(app_client):
     op = await _token(client, "operator", "op-pw")
     boss = await _token(client, "boss", "boss-pw")
     service_id = await _create_service(client, op, "billing", "prod")
-    await _seed_success_deployment(app, service_id)
+    target_id = await _seed_success_deployment(app, service_id)
+    await _seed_success_deployment(
+        app,
+        service_id,
+        version="v2",
+        previous_deployment_id=target_id,
+    )
 
-    pending = await client.post(f"/api/services/{service_id}/rollback", headers=_auth(op))
+    pending = await client.post(
+        f"/api/services/{service_id}/rollback",
+        headers=_auth(op),
+        json={"target_deployment_id": target_id},
+    )
     approval_id = pending.json()["data"]["approval_id"]
 
     # 由另一审批人批准(自审批防护)
@@ -316,3 +363,76 @@ async def test_approve_delete_dispatches_lifecycle(app_client):
     # 建出的是 delete task(执行路径已接通,不再 501)
     got = await client.get(f"/api/tasks/{task_id}", headers=_auth(op))
     assert got.json()["data"]["type"] == "delete"
+
+
+async def test_approve_deploy_conflict_keeps_approval_pending(app_client):
+    client, _, app = app_client
+    operator = await _token(client, "operator", "op-pw")
+    boss = await _token(client, "boss", "boss-pw")
+    service_id = await _create_service(client, operator, "busy-service", "prod")
+    pending = await client.post(
+        f"/api/services/{service_id}/deploy",
+        headers=_auth(operator),
+        json={"version": "v2", "strategy": "rolling"},
+    )
+    approval_id = pending.json()["data"]["approval_id"]
+    async with app.state.db.session() as session:
+        active = await TaskRepository(session).create_deployment_operation(
+            type=TaskType.ROLLBACK,
+            service_id=service_id,
+            created_by="other-operator",
+        )
+
+    approved = await client.post(
+        f"/api/approvals/{approval_id}/approve",
+        headers=_auth(boss),
+    )
+
+    assert approved.status_code == 409
+    assert approved.json()["error"]["code"] == "deployment_in_progress"
+    assert approved.json()["error"]["details"] == {"active_task_id": active.id}
+    async with app.state.db.session() as session:
+        approval = await ApprovalRepository(session).get(approval_id)
+        assert approval.status == ApprovalStatus.PENDING
+        assert approval.task_id is None
+
+
+async def test_approve_artifact_rollback_without_pipeline_provider(app_client):
+    client, _, app = app_client
+    operator = await _token(client, "operator", "op-pw")
+    boss = await _token(client, "boss", "boss-pw")
+    service_id = await _create_service(client, operator, "artifact-rollback", "prod")
+    artifact_id = "b" * 32
+    target_id = await _seed_success_deployment(
+        app,
+        service_id,
+        artifact_id=artifact_id,
+    )
+    await _seed_success_deployment(
+        app,
+        service_id,
+        version="v2",
+        previous_deployment_id=target_id,
+    )
+    fake_deployer = _FakeArtifactDeployer()
+    app.state.pipeline_adapter_provider = None
+    app.state.artifact_deployment_service = fake_deployer
+    pending = await client.post(
+        f"/api/services/{service_id}/rollback",
+        headers=_auth(operator),
+        json={"target_deployment_id": target_id},
+    )
+
+    approved = await client.post(
+        f"/api/approvals/{pending.json()['data']['approval_id']}/approve",
+        headers=_auth(boss),
+    )
+
+    assert approved.status_code == 202
+    task = await client.get(
+        f"/api/tasks/{approved.json()['data']['task_id']}",
+        headers=_auth(operator),
+    )
+    assert task.json()["data"]["status"] == "success"
+    assert fake_deployer.resolve_calls == [(service_id, artifact_id)]
+    assert fake_deployer.deploy_calls == [(service_id, artifact_id)]
