@@ -142,7 +142,7 @@ Plan-Time Complexity Check:
 
 ### Create
 
-- `backend/alembic/versions/20260723_1200_d4e5f6a7b8c9_active_deployment_task_exclusivity.py`
+- `backend/alembic/versions/active_deployment_task_exclusivity.py`
 - `backend/tests/integration/test_deployment_task_exclusivity.py`
 
 ### Modify
@@ -310,4 +310,3 @@ Plan-Time Complexity Check:
 - Architecture integrity: 无 caller-side fallback、无第二 runtime owner、无内存锁。
 - Verification: 每个 slice 有 RED/GREEN 命令，最终有全量门禁。
 - Dual track: 每个结构性任务均含 Repair/Retirement Track。
-
