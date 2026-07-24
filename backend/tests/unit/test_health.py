@@ -3,6 +3,19 @@
 from fastapi.testclient import TestClient
 
 
+def test_root_returns_service_entrypoints(client: TestClient) -> None:
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    assert resp.json()["data"] == {
+        "service": "一脉 Axon 控制面",
+        "status": "ok",
+        "health": "/healthz",
+        "docs": "/docs",
+        "api_prefix": "/api",
+    }
+
+
 def test_healthz_returns_200(client: TestClient) -> None:
     resp = client.get("/healthz")
     assert resp.status_code == 200

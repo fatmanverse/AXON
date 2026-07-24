@@ -34,6 +34,7 @@ from app.core.middleware import (
     SecurityHeadersMiddleware,
 )
 from app.core.ratelimit import RateLimiter, RedisRateLimiter
+from app.core.responses import ok
 from app.core.secrets import build_secret_store
 from app.core.ws_hub import RedisHub, configure_hub
 from app.services.agent_connection import AgentConnectionManager
@@ -165,6 +166,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+
+    @app.get("/", include_in_schema=False)
+    async def root() -> dict:
+        return ok(
+            {
+                "service": settings.app_name,
+                "status": "ok",
+                "health": "/healthz",
+                "docs": "/docs",
+                "api_prefix": "/api",
+            }
+        )
 
     # 中间件注册顺序:后加者在外层。期望执行顺序(外→内):
     # CORS → SecurityHeaders → RateLimit → BodySizeLimit → RequestContext
