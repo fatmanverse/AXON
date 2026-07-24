@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "baselineRefs": [
+    "docs/aegis/specs/2026-07-23-full-platform-production-readiness-design.md"
+  ],
+  "impactStatement": "docs/aegis/work/2026-07-23-production-platform-readiness/impact-statement-draft.json",
+  "compatPlan": "existing CI deploy, artifact deploy, rollback, promotion, approval, webhook, task polling, SSH runtime, and Alembic revision IDs remain compatible",
+  "retirementPlan": "进程内 Agent owner 不再承担生产跨副本权威；旧 insecure/default 路径仅保留显式 dev/test",
+  "evidenceBundle": [
+    "docs/aegis/work/2026-07-23-production-platform-readiness/evidence-bundle-draft-final-agent-routing.json",
+    "docs/aegis/work/2026-07-23-production-platform-readiness/evidence-bundle-draft-final-backend-frontend.json",
+    "docs/aegis/work/2026-07-23-production-platform-readiness/evidence-bundle-draft-final-contract-migrations.json",
+    "docs/aegis/work/2026-07-23-production-platform-readiness/evidence-bundle-draft-final-packaging.json",
+    "docs/aegis/work/2026-07-23-production-platform-readiness/evidence-bundle-draft-phase0-config-green.json",
+    "docs/aegis/work/2026-07-23-production-platform-readiness/evidence-bundle-draft-phase0-config-tests.json",
+    "docs/aegis/work/2026-07-23-production-platform-readiness/evidence-bundle-draft-phase0-identity-green.json"
+  ]
+}

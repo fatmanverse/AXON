@@ -5,8 +5,8 @@
 - GET    /api/services/{id}/builds    该服务构建历史(最新在前)。
 - GET    /api/services/{id}/artifacts 该服务构建产物列表。
 - GET    /api/builds/{id}             单条构建详情。
-- GET    /api/build-nodes             构建节点列表(一期仅本地节点)。
-- POST   /api/build-nodes             注册构建节点(架构预留,buildnode:*:write)。
+- GET    /api/build-nodes             构建节点列表。
+- POST   /api/build-nodes             注册本地/SSH 构建节点(buildnode:*:write)。
 - DELETE /api/build-nodes/{id}        删除构建节点(buildnode:*:write)。
 - GET    /api/artifact-registries     制品库列表。
 - POST   /api/artifact-registries     建制品库(凭据换 vault id,buildnode:*:write)。
@@ -70,7 +70,14 @@ def _require_build_permission(user: User, service: Service) -> None:
 def _build_service(request: Request, db: Database, secrets: SecretStore) -> BuildService:
     """构造编排服务。测试可经 app.state.build_executor_factory 注入 fake 执行器。"""
     factory = getattr(request.app.state, "build_executor_factory", None)
-    return BuildService(db, secrets, request.app.state.settings, executor_factory=factory)
+    return BuildService(
+        db,
+        secrets,
+        request.app.state.settings,
+        executor_factory=factory,
+        redis=getattr(request.app.state, "redis", None),
+        connector=getattr(request.app.state, "ssh_connector", None),
+    )
 
 
 # ── 构建触发 / 查询 ────────────────────────────────────────────────
@@ -228,6 +235,16 @@ async def delete_build_node(
         ua=request.headers.get("user-agent"),
     )
     return ok({"deleted": True})
+
+
+@router.post("/build-nodes/{node_id}/heartbeat")
+async def heartbeat_build_node(
+    node_id: str,
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(require_permission(parse_permission("buildnode:*:write"))),
+) -> dict:
+    node = await BuildNodeRepository(session).mark_heartbeat(node_id)
+    return ok(BuildNodeOut.model_validate(node).model_dump(mode="json"))
 
 
 # ── 制品库 ─────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 """网关中间件:请求追踪、安全响应头、全局限流。"""
 
+import inspect
 import time
 import uuid
 
@@ -9,7 +10,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from app.core.logging import get_logger
-from app.core.ratelimit import RateLimiter
+from app.core.ratelimit import RateLimiter, RateLimitUnavailable
 from app.core.responses import fail
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -85,7 +86,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if any(path.startswith(prefix) for prefix in self._exempt_prefixes):
             return await call_next(request)
-        if not self._limiter.allow(_client_key(request)):
+        try:
+            allowed = self._limiter.allow(_client_key(request))
+            if inspect.isawaitable(allowed):
+                allowed = await allowed
+        except RateLimitUnavailable:
+            log.error("rate_limit_backend_unavailable")
+            return JSONResponse(
+                status_code=503,
+                content=fail("coordination_unavailable", "分布式限流服务暂不可用"),
+            )
+        if not allowed:
             log.warning("rate_limited", client=_client_key(request))
             response = JSONResponse(
                 status_code=429,

@@ -197,10 +197,7 @@ export function ServicesPage(): React.ReactElement {
     },
   });
 
-  const handleAction = async (
-    service: Service,
-    action: LifecycleAction,
-  ): Promise<void> => {
+  const handleAction = async (service: Service, action: LifecycleAction): Promise<void> => {
     const label = ACTION_LABEL[action];
     setBusyId(service.id);
     const hide = message.loading(`${service.name} ${label}中…`, 0);
@@ -232,7 +229,12 @@ export function ServicesPage(): React.ReactElement {
       dataIndex: "name",
       key: "name",
       render: (name: string, row) => (
-        <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setDetailService(row)}>
+        <Button
+          type="link"
+          size="small"
+          style={{ padding: 0 }}
+          onClick={() => setDetailService(row)}
+        >
           {name}
         </Button>
       ),
@@ -242,9 +244,7 @@ export function ServicesPage(): React.ReactElement {
       dataIndex: "env",
       key: "env",
       width: 90,
-      render: (env: ServiceEnvironment) => (
-        <Tag color={envTagColor(envByName.get(env))}>{env}</Tag>
-      ),
+      render: (env: ServiceEnvironment) => <Tag color={envTagColor(envByName.get(env))}>{env}</Tag>,
     },
     {
       title: "运行时",
@@ -263,8 +263,7 @@ export function ServicesPage(): React.ReactElement {
       title: "期望版本",
       dataIndex: "desired_version",
       key: "desired_version",
-      render: (v: string | null) =>
-        v ? v : <Muted />,
+      render: (v: string | null) => (v ? v : <Muted />),
     },
     {
       title: "操作",
@@ -319,9 +318,7 @@ export function ServicesPage(): React.ReactElement {
   // 「名称」「操作」为固定列,其余按可见集合裁剪;搜索按服务名前端即时过滤。
   const visibleTableColumns = columns.filter(
     (col) =>
-      col.key === "name" ||
-      col.key === "actions" ||
-      visibleColumns.includes(col.key as string),
+      col.key === "name" || col.key === "actions" || visibleColumns.includes(col.key as string),
   );
   const keyword = search.trim().toLowerCase();
   const filteredData = (data ?? []).filter(
@@ -405,11 +402,7 @@ export function ServicesPage(): React.ReactElement {
         okText="创建"
         initialValues={{ runtime: "systemd" }}
       >
-        <Form.Item
-          name="name"
-          label="服务名"
-          rules={[{ required: true, message: "请输入服务名" }]}
-        >
+        <Form.Item name="name" label="服务名" rules={[{ required: true, message: "请输入服务名" }]}>
           <Input placeholder="如 billing" />
         </Form.Item>
         <Form.Item
@@ -427,10 +420,7 @@ export function ServicesPage(): React.ReactElement {
         <Form.Item name="runtime" label="运行时">
           <Select options={RUNTIME_OPTIONS} />
         </Form.Item>
-        <Form.Item
-          noStyle
-          shouldUpdate={(prev, cur) => prev.runtime !== cur.runtime}
-        >
+        <Form.Item noStyle shouldUpdate={(prev, cur) => prev.runtime !== cur.runtime}>
           {({ getFieldValue }) => {
             const rt = (getFieldValue("runtime") as Runtime) ?? "systemd";
             return (

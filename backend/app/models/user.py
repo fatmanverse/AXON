@@ -6,9 +6,10 @@
 """
 
 import uuid
+from datetime import datetime
 
 from sqlalchemy import Column as SAColumn
-from sqlalchemy import ForeignKey, String, Table, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Table, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -33,6 +34,9 @@ class User(Base, TimestampMixin):
     username: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    failed_login_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     roles: Mapped[list["Role"]] = relationship(
         secondary=user_roles, back_populates="users", lazy="selectin"

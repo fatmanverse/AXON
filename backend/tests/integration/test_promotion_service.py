@@ -107,9 +107,7 @@ async def test_promote_reuses_staging_artifact_in_prod(db):
     async with db.session() as session:
         task = await TaskRepository(session).get(task_id)
         assert task.status == TaskStatus.SUCCESS
-        deployments = await DeploymentRepository(session).list_for_service(
-            prod_id, env="prod"
-        )
+        deployments = await DeploymentRepository(session).list_for_service(prod_id, env="prod")
     # prod 落了同一制品(不重构建)
     assert len(deployments) == 1
     assert deployments[0].artifact == "reg/billing:abc123"

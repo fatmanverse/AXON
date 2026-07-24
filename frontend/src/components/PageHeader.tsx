@@ -31,12 +31,14 @@ export function PageHeader({ title, inline, extra }: PageHeaderProps): React.Rea
       }}
     >
       <Space size="middle" wrap>
-        <span style={{ fontSize: 15, fontWeight: 600, color: colors.textTitle }}>
-          {title}
-        </span>
+        <span style={{ fontSize: 15, fontWeight: 600, color: colors.textTitle }}>{title}</span>
         {inline}
       </Space>
-      {extra != null && <Space size="small" wrap>{extra}</Space>}
+      {extra != null && (
+        <Space size="small" wrap>
+          {extra}
+        </Space>
+      )}
     </div>
   );
 }

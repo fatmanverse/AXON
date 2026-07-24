@@ -8,11 +8,7 @@
 
 import { getTask, type Task, type TaskStatus } from "./services";
 
-const TERMINAL: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
-  "success",
-  "failed",
-  "unknown",
-]);
+const TERMINAL: ReadonlySet<TaskStatus> = new Set<TaskStatus>(["success", "failed", "unknown"]);
 
 export function isTerminal(status: TaskStatus): boolean {
   return TERMINAL.has(status);
@@ -25,8 +21,7 @@ export interface PollOptions {
   fetcher?: (taskId: string) => Promise<Task>;
 }
 
-const delay = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * 轮询直到 task 到终态或超时。超时返回最后一次拿到的 task(不抛),

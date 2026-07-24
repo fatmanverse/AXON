@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "final-agent-routing",
+  "type": "command",
+  "source": "backend/app/services/redis_agent_connection.py,backend/tests/unit/test_redis_agent_connection.py",
+  "summary": "31 条 Agent/gateway/gRPC/连接回归通过；Redis owner、跨副本命令/结果、stale heartbeat fencing、typed 503 已验证",
+  "verifier": "uv run pytest tests/unit/test_redis_agent_connection.py tests/unit/test_agent_gateway.py tests/integration/test_agent_grpc_servicer.py tests/integration/test_agent_connection.py tests/integration/test_agent_gateway_real.py -q"
+}

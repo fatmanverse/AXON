@@ -38,7 +38,7 @@ async def app_client():
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
         log_json=False,
-        jwt_secret="itest-secret-alert-webhook",
+        jwt_secret="itest-secret-alert-webhook-at-least-32-bytes",
         secret_backend="local",
         secret_master_key="",
         rate_limit_enabled=False,

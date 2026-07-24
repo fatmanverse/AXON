@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "requestedOutcome": "将 Axon 统一运维控制面补齐到可在真实生产环境运行的完整平台边界",
+  "goal": "完成高可用、安全认证、Agent 生产闭环、高级发布策略、构建调度、CI 补偿、灾备和真实环境验收",
+  "successEvidence": [
+    "生产配置 fail-fast；TLS/mTLS 与认证闭环；多副本状态一致；canary/blue-green 与外部编排；构建节点调度；备份恢复演练；真实 PostgreSQL/Redis/Celery/CI/Agent smoke；全量测试和质量门禁通过"
+  ],
+  "stopCondition": "done only after all required production gates pass; blocked if required external infrastructure or credentials are unavailable; needs-verification if automated or real-environment evidence is incomplete",
+  "nonGoals": [
+    "do not silently claim unsupported runtime or strategy success",
+    "do not mutate live production data during development verification"
+  ],
+  "scope": "backend, frontend, agent, ops, docs, security, runtime infrastructure",
+  "changeKinds": [
+    "feature"
+  ],
+  "riskHints": [
+    "security, persistence, distributed state, external adapters, release workflow"
+  ]
+}

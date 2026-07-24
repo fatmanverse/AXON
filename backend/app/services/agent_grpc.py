@@ -24,6 +24,8 @@ from collections.abc import AsyncIterator, Callable
 from time import monotonic
 from typing import Any
 
+import grpc
+
 from app.core.logging import get_logger
 from app.grpc_gen import agent_pb2, agent_pb2_grpc
 from app.services.agent_connection import (
@@ -34,6 +36,33 @@ from app.services.agent_connection import (
 )
 
 log = get_logger("agent_grpc")
+
+
+async def _reject_identity(context: Any, message: str) -> None:
+    abort = getattr(context, "abort", None)
+    if callable(abort):
+        await abort(grpc.StatusCode.PERMISSION_DENIED, message)
+    raise PermissionError(message)
+
+
+def _certificate_identities(context: Any) -> set[str]:
+    """Return verified client-certificate identities exposed by gRPC."""
+    peer_identities = getattr(context, "peer_identities", None)
+    if callable(peer_identities):
+        values = peer_identities() or ()
+        return {
+            value.decode("utf-8") if isinstance(value, bytes) else str(value) for value in values
+        }
+
+    auth_context = getattr(context, "auth_context", None)
+    if not callable(auth_context):
+        return set()
+    values: list[bytes | str] = []
+    auth = auth_context()
+    for key in ("x509_subject_alternative_name", "x509_common_name"):
+        values.extend(auth.get(key, ()))
+        values.extend(auth.get(key.encode(), ()))
+    return {value.decode("utf-8") if isinstance(value, bytes) else str(value) for value in values}
 
 
 class _QueueTransport:
@@ -108,9 +137,13 @@ class AgentServicer(agent_pb2_grpc.AgentServiceServicer):
         manager: AgentConnectionManager,
         *,
         clock: Callable[[], float] = monotonic,
+        require_client_identity: bool = False,
+        revoked_agent_ids: set[str] | frozenset[str] = frozenset(),
     ) -> None:
         self._manager = manager
         self._clock = clock
+        self._require_client_identity = require_client_identity
+        self._revoked_agent_ids = revoked_agent_ids
 
     async def Connect(  # noqa: N802 - gRPC 生成的方法名,须一致
         self, request_iterator: AsyncIterator[Any], context: Any
@@ -127,10 +160,21 @@ class AgentServicer(agent_pb2_grpc.AgentServiceServicer):
                     agent_id = pb_msg.agent_id
                     if not agent_id:
                         raise ValueError("首条 AgentMessage 缺少 agent_id,拒绝建流")
-                    self._manager.register(agent_id, transport, now=self._clock())
+                    if agent_id in self._revoked_agent_ids:
+                        await _reject_identity(context, f"Agent 身份已吊销:{agent_id}")
+                    if self._require_client_identity:
+                        identities = _certificate_identities(context)
+                        if not identities:
+                            await _reject_identity(context, "缺少已验证的 Agent 客户端证书身份")
+                        if agent_id not in identities:
+                            await _reject_identity(
+                                context,
+                                f"客户端证书身份与 agent_id 不匹配:{agent_id}",
+                            )
+                    await self._manager.register_connection(agent_id, transport, now=self._clock())
                 message = _to_agent_message(pb_msg)
                 if message.kind == AgentMessageKind.HEARTBEAT:
-                    self._manager.heartbeat(agent_id, now=self._clock())
+                    await self._manager.heartbeat_connection(agent_id, now=self._clock())
                 await self._manager.handle_inbound(message)
 
         inbound_task = asyncio.create_task(pump_inbound())
@@ -154,4 +198,4 @@ class AgentServicer(agent_pb2_grpc.AgentServiceServicer):
             except (asyncio.CancelledError, Exception):  # noqa: BLE001 - 收尾吞异常
                 pass
             if agent_id is not None:
-                self._manager.unregister(agent_id)
+                await self._manager.unregister_connection(agent_id)

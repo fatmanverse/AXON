@@ -80,9 +80,7 @@ class Deployment(Base, TimestampMixin):
     # 收敛为幂等更新。pipeline_id 可空,SQL 中 NULL 不参与唯一判断,故 UI 触发尚未
     # 回填 pipeline_id 的 running 记录不受约束,只有带 pipeline_id 的上报走去重。
     __table_args__ = (
-        UniqueConstraint(
-            "pipeline_id", "service_id", "env", name="uq_deployments_idempotency"
-        ),
+        UniqueConstraint("pipeline_id", "service_id", "env", name="uq_deployments_idempotency"),
     )
 
     # id 即 deployment_id 关联键(§14.3)

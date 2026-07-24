@@ -8,17 +8,23 @@
  */
 
 import { useState } from "react";
-import { Button, Card, Input, Modal, Popconfirm, Result, Skeleton, Table, Tag, message } from "antd";
+import {
+  Button,
+  Card,
+  Input,
+  Modal,
+  Popconfirm,
+  Result,
+  Skeleton,
+  Table,
+  Tag,
+  message,
+} from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/client";
-import {
-  type Approval,
-  approveApproval,
-  listApprovals,
-  rejectApproval,
-} from "@/api/approvals";
+import { type Approval, approveApproval, listApprovals, rejectApproval } from "@/api/approvals";
 import { Muted } from "@/components/Muted";
 import { PageHeader } from "@/components/PageHeader";
 import { colors, shadows } from "@/theme";

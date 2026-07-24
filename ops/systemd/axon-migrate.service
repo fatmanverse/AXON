@@ -1,0 +1,23 @@
+[Unit]
+Description=Axon Database Migration
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=axon
+Group=axon
+WorkingDirectory=/opt/axon/backend
+EnvironmentFile=/etc/axon/axon.env
+ExecStart=/opt/axon/backend/.venv/bin/alembic upgrade head
+ExecStart=/opt/axon/backend/.venv/bin/python -m app.cli.seed
+RemainAfterExit=true
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/axon /var/log/axon
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

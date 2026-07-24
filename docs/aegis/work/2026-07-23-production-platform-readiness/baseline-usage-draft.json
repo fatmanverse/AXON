@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-07-23-production-platform-readiness",
+  "requiredBaselineRefs": [
+    "docs/aegis/baseline/2026-07-20-initial-baseline.md"
+  ],
+  "deliveredContextRefs": [],
+  "acknowledgedBeforePlanRefs": [
+    "docs/aegis/baseline/2026-07-20-initial-baseline.md"
+  ],
+  "citedInPlanRefs": [
+    "docs/aegis/BASELINE-GOVERNANCE.md",
+    "docs/aegis/adr/ADR-0001-targeted-rollback-and-deployment-exclusivity.md"
+  ],
+  "missingRefs": [],
+  "decision": "continue"
+}

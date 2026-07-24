@@ -57,7 +57,7 @@ async def app_client():
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
         log_json=False,
-        jwt_secret="itest-secret-metrics",
+        jwt_secret="itest-secret-metrics-at-least-32-bytes",
         secret_backend="local",
         secret_master_key="",
         rate_limit_enabled=False,
@@ -80,9 +80,7 @@ async def app_client():
 
 
 async def _token(client, username, password):
-    resp = await client.post(
-        "/api/auth/login", json={"username": username, "password": password}
-    )
+    resp = await client.post("/api/auth/login", json={"username": username, "password": password})
     return resp.json()["data"]["access_token"]
 
 
@@ -94,9 +92,7 @@ async def test_query_allowed_metric_returns_data(app_client):
     client, _, _ = app_client
     token = await _token(client, "viewer", "viewer-pw")
 
-    resp = await client.get(
-        "/api/metrics/query", params={"query": "up"}, headers=_auth(token)
-    )
+    resp = await client.get("/api/metrics/query", params={"query": "up"}, headers=_auth(token))
 
     assert resp.status_code == 200
     body = resp.json()
@@ -143,9 +139,7 @@ async def test_empty_query_bad_request(app_client):
     client, _, _ = app_client
     token = await _token(client, "viewer", "viewer-pw")
 
-    resp = await client.get(
-        "/api/metrics/query", params={"query": "   "}, headers=_auth(token)
-    )
+    resp = await client.get("/api/metrics/query", params={"query": "   "}, headers=_auth(token))
 
     assert resp.status_code == 400
     assert resp.json()["error"]["code"] == "invalid_query"

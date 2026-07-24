@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "candidateDocs": [
+    "docs/aegis/baseline/2026-07-20-initial-baseline.md"
+  ],
+  "whyRelevant": "defines current product and architecture non-negotiables and explicitly lists high-availability and advanced strategy non-goals",
+  "missingAuthority": []
+}

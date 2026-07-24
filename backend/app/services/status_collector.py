@@ -99,9 +99,7 @@ class StatusCollector:
         log.info("status_collect_done", probed=probed, failed=failed)
         return CollectResult(probed=probed, failed=failed)
 
-    async def _load_targets(
-        self, session: Any
-    ) -> list[tuple[str, Service, Server]]:
+    async def _load_targets(self, session: Any) -> list[tuple[str, Service, Server]]:
         """取所有落在服务器上的放置,连同其 service 与 server(SSH 模式)。"""
         svc_repo = ServiceRepository(session)
         server_repo = ServerRepository(session)

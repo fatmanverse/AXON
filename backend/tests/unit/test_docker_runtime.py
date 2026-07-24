@@ -152,6 +152,4 @@ async def test_status_container_name_is_shell_escaped():
 
     await runtime.status(malicious)
 
-    assert executor.ran == [
-        "docker inspect --format '{{.State.Running}}' 'evil$(whoami)'"
-    ]
+    assert executor.ran == ["docker inspect --format '{{.State.Running}}' 'evil$(whoami)'"]

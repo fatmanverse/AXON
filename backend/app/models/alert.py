@@ -38,9 +38,7 @@ def _uuid() -> str:
 class Alert(Base, TimestampMixin):
     __tablename__ = "alerts"
     # 幂等键:Alertmanager 每条告警带稳定 fingerprint,重复上报幂等更新同一行。
-    __table_args__ = (
-        UniqueConstraint("fingerprint", name="uq_alerts_fingerprint"),
-    )
+    __table_args__ = (UniqueConstraint("fingerprint", name="uq_alerts_fingerprint"),)
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     # fingerprint 是 Alertmanager 侧稳定标识,作幂等键

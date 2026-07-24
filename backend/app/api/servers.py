@@ -19,10 +19,11 @@ from app.api.deps import (
     get_database,
     get_secret_store,
     get_session,
+    get_settings,
     get_ssh_connector,
     require_permission,
 )
-from app.core.config import Settings, get_settings
+from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import AppError
 from app.core.permissions import parse_permission

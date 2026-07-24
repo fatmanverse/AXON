@@ -17,7 +17,9 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # 用应用配置里的 DB URL 覆盖 alembic.ini 的空值
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+settings = get_settings()
+settings.validate_for_runtime()
+config.set_main_option("sqlalchemy.url", settings.database_url)
 
 target_metadata = Base.metadata
 

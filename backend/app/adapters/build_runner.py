@@ -86,9 +86,7 @@ class BuildRunner:
                 status_code=400,
             )
         artifact = shlex.quote(spec.artifact_path)
-        await self._step(
-            f"tar czf {artifact} -C {ws} {shlex.quote(spec.output_path)}"
-        )
+        await self._step(f"tar czf {artifact} -C {ws} {shlex.quote(spec.output_path)}")
         size = await self._read_size(spec.artifact_path)
         return BuildOutcome(git_sha=git_sha, artifact_uri=spec.artifact_path, size_bytes=size)
 

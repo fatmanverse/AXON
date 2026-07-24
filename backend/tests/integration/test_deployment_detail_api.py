@@ -28,7 +28,7 @@ async def app_client():
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
         log_json=False,
-        jwt_secret="itest-secret-detail",
+        jwt_secret="itest-secret-detail-at-least-32-bytes",
         secret_backend="local",
         secret_master_key="",
         rate_limit_enabled=False,
@@ -52,27 +52,34 @@ async def _seed(app, *, git_sha, critical):
     async with db.session() as session:
         svc = await ServiceRepository(session).create_service(
             ServiceCreate(
-                name="billing", env=ServiceEnvironment.DEV,
-                runtime=Runtime.SYSTEMD, runtime_ref={"unit_name": "billing.service"},
+                name="billing",
+                env=ServiceEnvironment.DEV,
+                runtime=Runtime.SYSTEMD,
+                runtime_ref={"unit_name": "billing.service"},
             )
         )
         service_id = svc.id
         dep = await DeploymentRepository(session).create(
-            service_id=service_id, env="dev", source=DeploymentSource.UI_TRIGGERED,
-            version="v1", git_sha=git_sha,
+            service_id=service_id,
+            env="dev",
+            source=DeploymentSource.UI_TRIGGERED,
+            version="v1",
+            git_sha=git_sha,
         )
         deployment_id = dep.id
         await ScanResultRepository(session).upsert(
-            service="billing", git_sha=git_sha, scanner=Scanner.SONARQUBE,
-            critical=critical, high=1, passed=(critical == 0),
+            service="billing",
+            git_sha=git_sha,
+            scanner=Scanner.SONARQUBE,
+            critical=critical,
+            high=1,
+            passed=(critical == 0),
         )
     return service_id, deployment_id
 
 
 async def _token(client):
-    resp = await client.post(
-        "/api/auth/login", json={"username": "operator", "password": "op-pw"}
-    )
+    resp = await client.post("/api/auth/login", json={"username": "operator", "password": "op-pw"})
     return resp.json()["data"]["access_token"]
 
 
@@ -101,13 +108,17 @@ async def test_detail_empty_scans_when_no_git_sha(app_client):
     async with db.session() as session:
         svc = await ServiceRepository(session).create_service(
             ServiceCreate(
-                name="orders", env=ServiceEnvironment.DEV,
-                runtime=Runtime.SYSTEMD, runtime_ref={"unit_name": "orders.service"},
+                name="orders",
+                env=ServiceEnvironment.DEV,
+                runtime=Runtime.SYSTEMD,
+                runtime_ref={"unit_name": "orders.service"},
             )
         )
         service_id = svc.id
         dep = await DeploymentRepository(session).create(
-            service_id=service_id, env="dev", source=DeploymentSource.UI_TRIGGERED,
+            service_id=service_id,
+            env="dev",
+            source=DeploymentSource.UI_TRIGGERED,
             version="v1",
         )
         deployment_id = dep.id
@@ -135,7 +146,5 @@ async def test_detail_unknown_deployment_404(app_client):
 async def test_detail_requires_auth(app_client):
     client, _, app = app_client
     service_id, deployment_id = await _seed(app, git_sha="sha1", critical=0)
-    resp = await client.get(
-        f"/api/services/{service_id}/deployments/{deployment_id}"
-    )
+    resp = await client.get(f"/api/services/{service_id}/deployments/{deployment_id}")
     assert resp.status_code == 401

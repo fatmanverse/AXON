@@ -86,27 +86,21 @@ async def test_stop_scales_to_zero():
     api = FakeAppsV1Api()
     await _runtime(api).stop(NS, WORKLOAD)
 
-    assert api.scaled == [
-        {"name": WORKLOAD, "namespace": NS, "body": {"spec": {"replicas": 0}}}
-    ]
+    assert api.scaled == [{"name": WORKLOAD, "namespace": NS, "body": {"spec": {"replicas": 0}}}]
 
 
 async def test_start_scales_to_target_replicas():
     api = FakeAppsV1Api()
     await _runtime(api).start(NS, WORKLOAD, replicas=4)
 
-    assert api.scaled == [
-        {"name": WORKLOAD, "namespace": NS, "body": {"spec": {"replicas": 4}}}
-    ]
+    assert api.scaled == [{"name": WORKLOAD, "namespace": NS, "body": {"spec": {"replicas": 4}}}]
 
 
 async def test_scale_sets_replicas():
     api = FakeAppsV1Api()
     await _runtime(api).scale(NS, WORKLOAD, 7)
 
-    assert api.scaled == [
-        {"name": WORKLOAD, "namespace": NS, "body": {"spec": {"replicas": 7}}}
-    ]
+    assert api.scaled == [{"name": WORKLOAD, "namespace": NS, "body": {"spec": {"replicas": 7}}}]
 
 
 async def test_delete_removes_deployment():

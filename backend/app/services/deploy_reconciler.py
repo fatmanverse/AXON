@@ -30,7 +30,7 @@ from app.services.service_repository import ServiceRepository
 
 log = get_logger("deploy_reconciler")
 
-AdapterProvider = Callable[[Service], PipelineAdapter]
+AdapterProvider = Callable[[Service], PipelineAdapter | None]
 
 # CI 归一状态 → deployment 终态。running/unknown 不在表中,表示「暂不补齐」。
 _TERMINAL_MAP: dict[PipelineRunStatus, DeploymentStatus] = {
@@ -87,14 +87,12 @@ class DeployReconciler:
                 await DeploymentRepository(session).mark_status(deployment_id, terminal)
             reconciled += 1
 
-        return ReconcileResult(
-            scanned=len(targets), reconciled=reconciled, failed=failed
-        )
+        return ReconcileResult(scanned=len(targets), reconciled=reconciled, failed=failed)
 
-    async def _resolve(
-        self, service: Service, pipeline_id: str
-    ) -> DeploymentStatus | None:
+    async def _resolve(self, service: Service, pipeline_id: str) -> DeploymentStatus | None:
         """查 CI 状态并映射到 deployment 终态;仍在跑/未知则返回 None。"""
         adapter = self._adapter_provider(service)
+        if adapter is None:
+            return None
         status = await adapter.get_status(service.name, run_id=pipeline_id)
         return _TERMINAL_MAP.get(status)

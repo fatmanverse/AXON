@@ -357,8 +357,7 @@ function ConfigPanel({ serviceId }: { serviceId: string }): React.ReactElement {
                   : line.kind === "removed"
                     ? { background: colors.diffRemoveBg, color: colors.diffRemoveText }
                     : { color: colors.textBody };
-              const prefix =
-                line.kind === "added" ? "+ " : line.kind === "removed" ? "- " : "  ";
+              const prefix = line.kind === "added" ? "+ " : line.kind === "removed" ? "- " : "  ";
               return (
                 <div key={idx} style={{ ...style, padding: "0 8px", whiteSpace: "pre-wrap" }}>
                   {prefix}
@@ -378,7 +377,11 @@ function ConfigPanel({ serviceId }: { serviceId: string }): React.ReactElement {
 export function ConfigsPage(): React.ReactElement {
   const [serviceId, setServiceId] = useState<string | undefined>();
 
-  const { data: services, isLoading, error } = useQuery({
+  const {
+    data: services,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["services"],
     queryFn: () => listServices(),
   });
@@ -400,9 +403,7 @@ export function ConfigsPage(): React.ReactElement {
     return <Skeleton active paragraph={{ rows: 6 }} />;
   }
   if (!services || services.length === 0) {
-    return (
-      <Empty description="暂无服务,先在「服务」页创建" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-    );
+    return <Empty description="暂无服务,先在「服务」页创建" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
   }
 
   return (

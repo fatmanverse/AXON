@@ -26,7 +26,13 @@ vi.mock("echarts-for-react", () => ({
 import { ResourceChart, type DeployMarker } from "@/components/ResourceChart";
 
 const SERIES: LineSeries[] = [
-  { name: "CPU", points: [{ t: 1720000000000, v: 12 }, { t: 1720000060000, v: 14 }] },
+  {
+    name: "CPU",
+    points: [
+      { t: 1720000000000, v: 12 },
+      { t: 1720000060000, v: 14 },
+    ],
+  },
 ];
 
 describe("ResourceChart 部署标注", () => {

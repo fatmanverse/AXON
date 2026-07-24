@@ -32,6 +32,20 @@ class ArtifactTransfer(Protocol):
     async def upload(self, local_path: str, remote_path: str) -> None: ...
 
 
+class AgentArtifactTransport(Protocol):
+    async def upload_artifact(self, local_path: str, remote_path: str) -> None: ...
+
+
+class AgentArtifactTransfer:
+    """通过已认证 Agent 流传输制品，不绕过 ArtifactTransfer 契约。"""
+
+    def __init__(self, gateway: AgentArtifactTransport) -> None:
+        self._gateway = gateway
+
+    async def upload(self, local_path: str, remote_path: str) -> None:
+        await self._gateway.upload_artifact(local_path, remote_path)
+
+
 def _default_connector(**kwargs: Any) -> Any:
     """默认连接工厂（与 SSHExecutor 共用 asyncssh.connect 语义）。"""
     import asyncssh

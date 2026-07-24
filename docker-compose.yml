@@ -134,7 +134,7 @@ services:
       context: ./frontend
       args: *build-proxy
     ports:
-      - "${FRONTEND_PORT:-5173}:80"
+      - "${FRONTEND_PORT:-5173}:8080"
     depends_on:
       - api
 

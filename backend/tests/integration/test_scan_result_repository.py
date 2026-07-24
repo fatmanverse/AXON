@@ -29,8 +29,14 @@ async def test_upsert_inserts_first(db):
     async with db.session() as session:
         repo = ScanResultRepository(session)
         r = await repo.upsert(
-            service="billing", git_sha="abc", scanner=Scanner.SONARQUBE,
-            critical=0, high=1, medium=2, low=3, passed=True,
+            service="billing",
+            git_sha="abc",
+            scanner=Scanner.SONARQUBE,
+            critical=0,
+            high=1,
+            medium=2,
+            low=3,
+            passed=True,
             report_url="https://sonar/x",
         )
         assert r.id
@@ -42,13 +48,21 @@ async def test_upsert_duplicate_updates_same_row(db):
     async with db.session() as session:
         repo = ScanResultRepository(session)
         first = await repo.upsert(
-            service="billing", git_sha="abc", scanner=Scanner.SONARQUBE, critical=5, passed=False,
+            service="billing",
+            git_sha="abc",
+            scanner=Scanner.SONARQUBE,
+            critical=5,
+            passed=False,
         )
         first_id = first.id
     async with db.session() as session:
         repo = ScanResultRepository(session)
         second = await repo.upsert(
-            service="billing", git_sha="abc", scanner=Scanner.SONARQUBE, critical=0, passed=True,
+            service="billing",
+            git_sha="abc",
+            scanner=Scanner.SONARQUBE,
+            critical=0,
+            passed=True,
         )
         assert second.id == first_id
         rows = await repo.list_for_git_sha("abc")
@@ -61,8 +75,9 @@ async def test_different_scanners_kept_separately(db):
     async with db.session() as session:
         repo = ScanResultRepository(session)
         await repo.upsert(service="billing", git_sha="abc", scanner=Scanner.SONARQUBE, passed=True)
-        await repo.upsert(service="billing", git_sha="abc", 
-            scanner=Scanner.TRIVY, critical=1, passed=False)
+        await repo.upsert(
+            service="billing", git_sha="abc", scanner=Scanner.TRIVY, critical=1, passed=False
+        )
         rows = await repo.list_for_git_sha("abc")
         assert len(rows) == 2
 
@@ -77,16 +92,19 @@ async def test_list_empty_when_none(db):
 async def test_has_blocking_true_when_critical_present(db):
     async with db.session() as session:
         repo = ScanResultRepository(session)
-        await repo.upsert(service="billing", git_sha="abc", 
-            scanner=Scanner.SONARQUBE, critical=0, passed=True)
-        await repo.upsert(service="billing", git_sha="abc", 
-            scanner=Scanner.TRIVY, critical=3, passed=False)
+        await repo.upsert(
+            service="billing", git_sha="abc", scanner=Scanner.SONARQUBE, critical=0, passed=True
+        )
+        await repo.upsert(
+            service="billing", git_sha="abc", scanner=Scanner.TRIVY, critical=3, passed=False
+        )
         assert await repo.has_critical("abc") is True
 
 
 async def test_has_blocking_false_when_no_critical(db):
     async with db.session() as session:
         repo = ScanResultRepository(session)
-        await repo.upsert(service="billing", git_sha="abc", 
-            scanner=Scanner.SONARQUBE, critical=0, passed=True)
+        await repo.upsert(
+            service="billing", git_sha="abc", scanner=Scanner.SONARQUBE, critical=0, passed=True
+        )
         assert await repo.has_critical("abc") is False

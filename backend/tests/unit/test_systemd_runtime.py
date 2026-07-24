@@ -75,9 +75,7 @@ async def test_delete_disables_and_stops_unit():
 
 async def test_status_active_reports_running():
     cmd = f"systemctl is-active {UNIT}"
-    executor = FakeExecutor(
-        results={cmd: CommandResult(exit_code=0, stdout="active\n", stderr="")}
-    )
+    executor = FakeExecutor(results={cmd: CommandResult(exit_code=0, stdout="active\n", stderr="")})
     runtime = SystemdRuntime(executor)
 
     status = await runtime.status(UNIT)
@@ -104,9 +102,7 @@ async def test_status_inactive_reports_not_running():
 async def test_status_failed_reports_not_running():
     """failed 状态非 active,应判为 running=False,且不抛错。"""
     cmd = f"systemctl is-active {UNIT}"
-    executor = FakeExecutor(
-        results={cmd: CommandResult(exit_code=3, stdout="failed\n", stderr="")}
-    )
+    executor = FakeExecutor(results={cmd: CommandResult(exit_code=3, stdout="failed\n", stderr="")})
     runtime = SystemdRuntime(executor)
 
     status = await runtime.status(UNIT)

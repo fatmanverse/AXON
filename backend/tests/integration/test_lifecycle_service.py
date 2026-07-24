@@ -88,9 +88,7 @@ async def _seed_systemd_service(db, secrets, *, runtime=Runtime.SYSTEMD):
                 runtime_ref={"unit_name": "billing.service"},
             )
         )
-        await svc_repo.create_placement(
-            PlacementCreate(service_id=service.id, server_id=server.id)
-        )
+        await svc_repo.create_placement(PlacementCreate(service_id=service.id, server_id=server.id))
         return service.id
 
 
@@ -169,9 +167,7 @@ async def test_agent_mode_service_marks_task_failed_not_connected(db, secrets):
                 runtime_ref={"unit_name": "reporting.service"},
             )
         )
-        await svc_repo.create_placement(
-            PlacementCreate(service_id=service.id, server_id=server.id)
-        )
+        await svc_repo.create_placement(PlacementCreate(service_id=service.id, server_id=server.id))
         service_id = service.id
         task = await TaskRepository(session).create(
             type=TaskType.RESTART, target=f"service:{service_id}", payload={}
@@ -208,9 +204,7 @@ async def test_docker_restart_runs_docker_command_and_marks_success(db, secrets)
                 runtime_ref={"container_name": "cache"},
             )
         )
-        await svc_repo.create_placement(
-            PlacementCreate(service_id=service.id, server_id=server.id)
-        )
+        await svc_repo.create_placement(PlacementCreate(service_id=service.id, server_id=server.id))
         service_id = service.id
         task = await TaskRepository(session).create(
             type=TaskType.RESTART, target=f"service:{service_id}", payload={}

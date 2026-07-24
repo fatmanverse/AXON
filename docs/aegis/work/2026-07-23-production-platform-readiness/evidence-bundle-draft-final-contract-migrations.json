@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "final-contract-migrations",
+  "type": "command",
+  "source": "backend/openapi.json,frontend/src/api/schema.d.ts,backend/alembic/versions",
+  "summary": "make gen-api 成功；schema 只保留真实契约差异；SQLite Alembic upgrade/downgrade/upgrade 往返成功，head=e5f6a7b8c9d0",
+  "verifier": "make gen-api; alembic upgrade head; alembic downgrade base; alembic upgrade head"
+}

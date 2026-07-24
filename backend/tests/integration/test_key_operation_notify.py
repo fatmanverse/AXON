@@ -66,7 +66,7 @@ async def app_client(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
         log_json=False,
-        jwt_secret="itest-secret-notify",
+        jwt_secret="itest-secret-notify-at-least-32-bytes",
         secret_backend="local",
         secret_master_key="",
         rate_limit_enabled=False,
@@ -88,9 +88,7 @@ async def app_client(monkeypatch):
                 # 通知由环境的 requires_approval 语义驱动(§10.2):prod 声明需审批→关键
                 # 操作通知;dev 不需审批→高频常规操作不打扰值班。故 seed 两环境。
                 env_repo = EnvironmentRepository(session)
-                await env_repo.create(
-                    EnvironmentCreate(name="prod", requires_approval=True)
-                )
+                await env_repo.create(EnvironmentCreate(name="prod", requires_approval=True))
                 await env_repo.create(EnvironmentCreate(name="dev"))
             yield client, app
 

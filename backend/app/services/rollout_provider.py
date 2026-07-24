@@ -24,6 +24,9 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 
+from app.adapters.agent_gateway_registry import AgentGatewayRegistry
+from app.adapters.argo_rollouts import ArgoRolloutsProvider
+from app.adapters.http_load_balancer import HttpLoadBalancer
 from app.adapters.k8s_runtime import K8sRuntime
 from app.adapters.runtime_registry import SSH_RUNTIMES
 from app.core.config import Settings
@@ -46,7 +49,9 @@ def build_rollout_provider(
     settings: Settings,
     *,
     k8s_api_factory: K8sApiFactory | None = None,
+    argo_api_factory: Callable[[], object] | None = None,
     connector: Callable[..., object] | None = None,
+    agent_registry: AgentGatewayRegistry | None = None,
 ) -> RolloutProvider:
     """构造生产 rollout provider。
 
@@ -80,6 +85,17 @@ def build_rollout_provider(
             namespace=namespace,
             workload=workload,
             replicas=settings.k8s_default_replicas,
+            argo_provider=(
+                ArgoRolloutsProvider(
+                    argo_api_factory(),
+                    group=settings.argo_rollouts_group,
+                    version=settings.argo_rollouts_version,
+                    plural=settings.argo_rollouts_plural,
+                    timeout_sec=settings.argo_rollouts_health_timeout_sec,
+                )
+                if settings.argo_rollouts_enabled and argo_api_factory is not None
+                else None
+            ),
         )
 
     async def _build_bare_context(service: Service) -> RolloutContext | None:
@@ -102,11 +118,36 @@ def build_rollout_provider(
 
         targets: list[BareMetalTarget] = []
         for server in servers:
-            executor = build_executor_for_server(server, secrets, connector=connector)
+            executor = build_executor_for_server(
+                server,
+                secrets,
+                connector=connector,
+                agent_registry=agent_registry,
+            )
             targets.append(BareMetalTarget(adapter=spec.adapter_cls(executor), ref=ref))
 
         if not targets:
             return None
-        return RolloutContext(runtime=service.runtime, bare_targets=targets)
+        lb_cfg = settings.load_balancer_config
+        load_balancer = None
+        if lb_cfg:
+            if lb_cfg.get("provider") != "http":
+                raise ValueError("load_balancer_config.provider must be http")
+            load_balancer = HttpLoadBalancer(
+                lb_cfg.get("base_url", ""),
+                secrets,
+                token_credential_id=lb_cfg.get("token_credential_id", ""),
+                timeout_sec=float(lb_cfg.get("timeout_sec", "10")),
+            )
+        return RolloutContext(
+            runtime=service.runtime,
+            bare_targets=targets,
+            load_balancer=load_balancer,
+            upstream_ref=str(runtime_ref.get("upstream_ref") or ""),
+            new_upstream=str(runtime_ref.get("new_upstream") or ""),
+            canary_steps=tuple(
+                int(step) for step in (runtime_ref.get("canary_steps") or (10, 50, 100))
+            ),
+        )
 
     return _provider

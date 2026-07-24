@@ -5,10 +5,32 @@ broker/backend 用 Redis;beat 供定时任务(轮询兜底,§8.2)。
 """
 
 from celery import Celery
+from celery.signals import worker_process_init, worker_process_shutdown
+from redis import Redis
 
 from app.core.config import get_settings
+from app.core.ws_hub import RedisPublishHub, configure_hub
 
 settings = get_settings()
+_worker_redis: Redis | None = None
+
+
+@worker_process_init.connect
+def _configure_worker_realtime(**_kwargs) -> None:
+    global _worker_redis
+    if settings.coordination_backend != "redis":
+        return
+    _worker_redis = Redis.from_url(settings.redis_url, decode_responses=False)
+    configure_hub(RedisPublishHub(_worker_redis))
+
+
+@worker_process_shutdown.connect
+def _close_worker_realtime(**_kwargs) -> None:
+    global _worker_redis
+    if _worker_redis is not None:
+        _worker_redis.close()
+        _worker_redis = None
+
 
 celery_app = Celery(
     "yimai",

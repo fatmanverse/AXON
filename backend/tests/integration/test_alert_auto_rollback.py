@@ -49,7 +49,7 @@ def _make_settings(*, auto_rollback: bool) -> Settings:
     return Settings(
         database_url="sqlite+aiosqlite:///:memory:",
         log_json=False,
-        jwt_secret="itest-secret-auto-rb",
+        jwt_secret="itest-secret-auto-rb-at-least-32-bytes",
         secret_backend="local",
         secret_master_key="",
         rate_limit_enabled=False,

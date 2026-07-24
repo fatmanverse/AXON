@@ -48,9 +48,7 @@ describe("useAuthStore.login", () => {
       new ApiError({ code: "unauthorized", message: "密码错误" }, 401),
     );
 
-    await expect(useAuthStore.getState().login("admin", "bad")).rejects.toBeInstanceOf(
-      ApiError,
-    );
+    await expect(useAuthStore.getState().login("admin", "bad")).rejects.toBeInstanceOf(ApiError);
     expect(getToken()).toBeNull();
     expect(useAuthStore.getState().status).toBe("anonymous");
   });

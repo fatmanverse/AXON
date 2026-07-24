@@ -62,7 +62,7 @@ class BuildNodeOut(BaseModel):
 
 
 class BuildNodeCreate(BaseModel):
-    """注册构建节点入参(架构预留:一期只跑本地节点,此为后续注册用)。"""
+    """注册本地或 SSH 构建节点；外部节点需提供 host 与凭证引用。"""
 
     name: str = Field(min_length=1, max_length=128)
     server_id: str | None = Field(default=None, max_length=32)

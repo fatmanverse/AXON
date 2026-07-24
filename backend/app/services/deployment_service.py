@@ -436,6 +436,12 @@ class DeploymentService:
                     status_code=503,
                 )
 
+        rollout_context = (
+            await self._rollout_provider(service)
+            if self._rollout_provider is not None and target.artifact_id is None
+            else None
+        )
+
         async with self._db.session() as session:
             deployment = await DeploymentRepository(session).create(
                 service_id=service.id,
@@ -471,6 +477,16 @@ class DeploymentService:
                     deployment_id, DeploymentStatus.FAILED
                 )
             raise
+
+        if rollout_context is not None:
+            try:
+                await execute_release_strategy(target.strategy, rollout_context)
+            except Exception:
+                async with self._db.session() as session:
+                    await DeploymentRepository(session).mark_status(
+                        deployment_id, DeploymentStatus.FAILED
+                    )
+                raise
 
         async with self._db.session() as session:
             repo = DeploymentRepository(session)

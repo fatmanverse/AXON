@@ -11,7 +11,7 @@ from app.core.security import (
     verify_password,
 )
 
-_SECRET = "test-secret-key-please-change"
+_SECRET = "test-secret-key-at-least-32-bytes-long"
 
 
 def test_password_hash_roundtrip():
@@ -33,7 +33,7 @@ def test_jwt_roundtrip():
 def test_jwt_rejects_wrong_secret():
     token = create_access_token(subject="a", secret=_SECRET, roles=[])
     with pytest.raises(Exception):  # noqa: B017 InvalidSignature
-        decode_access_token(token, secret="other-secret")
+        decode_access_token(token, secret="other-secret-key-at-least-32-bytes")
 
 
 def test_jwt_rejects_expired():

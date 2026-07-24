@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-07-23-production-platform-readiness",
+  "currentTodo": "完成生产准入证据与外部环境门禁清单",
+  "completedTodos": [
+    "OpenAPI/schema 再生与前端 BuildsPage 制品部署入口",
+    "Redis Agent owner 跨 API 副本路由与 stale heartbeat fencing",
+    "Kubernetes/Compose/systemd 生产 packaging",
+    "后端/前端全量测试、静态检查、构建、迁移往返"
+  ],
+  "activeSlice": "Phase 5 final verification and external gate accounting",
+  "evidenceRefs": [
+    "docs/aegis/work/2026-07-23-production-platform-readiness/evidence-bundle-draft-final-backend-frontend.json",
+    "docs/aegis/work/2026-07-23-production-platform-readiness/evidence-bundle-draft-final-contract-migrations.json",
+    "docs/aegis/work/2026-07-23-production-platform-readiness/evidence-bundle-draft-final-packaging.json",
+    "docs/aegis/work/2026-07-23-production-platform-readiness/evidence-bundle-draft-final-agent-routing.json"
+  ],
+  "blockedOn": "真实 PostgreSQL/Redis/Celery/Go 1.25/Kubernetes/Argo/LB/Agent/OIDC provider 尚未在当前沙箱执行",
+  "nextStep": "提交代码并在 CI/预发执行真实 smoke；通过后再生产发布",
+  "updatedAt": "2026-07-23"
+}

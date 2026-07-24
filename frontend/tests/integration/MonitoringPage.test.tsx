@@ -72,7 +72,13 @@ const SERVER_B: Server = {
 const MATRIX = {
   resultType: "matrix",
   result: [
-    { metric: { instance: "10.0.0.10:9100" }, values: [[1720000000, "12.5"], [1720000060, "13.0"]] },
+    {
+      metric: { instance: "10.0.0.10:9100" },
+      values: [
+        [1720000000, "12.5"],
+        [1720000060, "13.0"],
+      ],
+    },
   ],
 };
 
@@ -92,9 +98,7 @@ describe("MonitoringPage", () => {
     renderPage();
 
     expect(
-      await screen.findByText(
-        "暂无纳管服务器,先在「服务器」页纳管并自举 node_exporter",
-      ),
+      await screen.findByText("暂无纳管服务器,先在「服务器」页纳管并自举 node_exporter"),
     ).toBeInTheDocument();
   });
 
@@ -105,21 +109,15 @@ describe("MonitoringPage", () => {
     renderPage();
 
     await waitFor(() => {
-      const rangeCalls = mock.history.get.filter(
-        (r) => r.url === "/api/metrics/query_range",
-      );
+      const rangeCalls = mock.history.get.filter((r) => r.url === "/api/metrics/query_range");
       // 四张资源卡各发一次区间查询
       expect(rangeCalls.length).toBe(4);
     });
 
     // PromQL 应带选中机的 instance=host:9100
-    const rangeCalls = mock.history.get.filter(
-      (r) => r.url === "/api/metrics/query_range",
-    );
+    const rangeCalls = mock.history.get.filter((r) => r.url === "/api/metrics/query_range");
     expect(
-      rangeCalls.every((r) =>
-        String(r.params?.query).includes('instance="10.0.0.10:9100"'),
-      ),
+      rangeCalls.every((r) => String(r.params?.query).includes('instance="10.0.0.10:9100"')),
     ).toBe(true);
 
     // 四张图表卡都渲染
@@ -134,9 +132,7 @@ describe("MonitoringPage", () => {
     renderPage();
 
     await waitFor(() => {
-      expect(
-        mock.history.get.filter((r) => r.url === "/api/metrics/query_range").length,
-      ).toBe(4);
+      expect(mock.history.get.filter((r) => r.url === "/api/metrics/query_range").length).toBe(4);
     });
     mock.resetHistory();
 
@@ -149,14 +145,10 @@ describe("MonitoringPage", () => {
     await user.click(option);
 
     await waitFor(() => {
-      const calls = mock.history.get.filter(
-        (r) => r.url === "/api/metrics/query_range",
-      );
+      const calls = mock.history.get.filter((r) => r.url === "/api/metrics/query_range");
       expect(calls.length).toBeGreaterThan(0);
       expect(
-        calls.every((r) =>
-          String(r.params?.query).includes('instance="10.0.0.11:9100"'),
-        ),
+        calls.every((r) => String(r.params?.query).includes('instance="10.0.0.11:9100"')),
       ).toBe(true);
     });
   });

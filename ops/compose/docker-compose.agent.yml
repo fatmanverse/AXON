@@ -1,0 +1,13 @@
+services:
+  api:
+    environment:
+      YIMAI_AGENT_GRPC_ENABLED: "true"
+      YIMAI_AGENT_GRPC_TLS_ENABLED: "true"
+      YIMAI_AGENT_GRPC_SERVER_CERT_FILE: /run/secrets/agent-grpc/tls.crt
+      YIMAI_AGENT_GRPC_SERVER_KEY_FILE: /run/secrets/agent-grpc/tls.key
+      YIMAI_AGENT_GRPC_CLIENT_CA_FILE: /run/secrets/agent-grpc/ca.crt
+      YIMAI_AGENT_GRPC_SERVER_ADDRESS: ${AXON_AGENT_GRPC_ADDRESS:?AXON_AGENT_GRPC_ADDRESS is required}
+    ports:
+      - "${AXON_AGENT_GRPC_PORT:-50051}:50051"
+    volumes:
+      - ${AXON_AGENT_TLS_DIR:?AXON_AGENT_TLS_DIR is required}:/run/secrets/agent-grpc:ro

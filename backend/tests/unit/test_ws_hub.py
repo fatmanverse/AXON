@@ -2,7 +2,25 @@
 
 import asyncio
 
-from app.core.ws_hub import Hub
+from app.core.ws_hub import Hub, RedisHub, RedisPublishHub
+
+
+class _FakeRedis:
+    def __init__(self) -> None:
+        self.published: list[tuple[str, str]] = []
+
+    async def publish(self, channel: str, message: str) -> int:
+        self.published.append((channel, message))
+        return 1
+
+
+class _FakeSyncRedis:
+    def __init__(self) -> None:
+        self.published: list[tuple[str, str]] = []
+
+    def publish(self, channel: str, message: str) -> int:
+        self.published.append((channel, message))
+        return 1
 
 
 async def test_subscriber_receives_published_message():
@@ -63,3 +81,26 @@ async def test_slow_subscriber_does_not_block_others():
     assert await asyncio.wait_for(fast.get(), timeout=1) == {"n": 2}
     # slow 只留住第一条,不报错
     assert slow.qsize() == 1
+
+
+async def test_redis_hub_publishes_cross_instance_envelope_and_local_delivery():
+    redis = _FakeRedis()
+    hub = RedisHub(redis, namespace="axon:test")
+    queue = hub.subscribe("deployments")
+
+    await hub.publish("deployments", {"id": "d-1"})
+
+    assert await queue.get() == {"id": "d-1"}
+    assert redis.published
+    assert redis.published[0][0] == "axon:test:events"
+    assert '"topic":"deployments"' in redis.published[0][1]
+
+
+async def test_worker_publish_hub_uses_sync_redis_without_event_loop_binding():
+    redis = _FakeSyncRedis()
+    hub = RedisPublishHub(redis, namespace="axon:test")
+
+    await hub.publish("alerts", {"id": "a-1"})
+
+    assert redis.published[0][0] == "axon:test:events"
+    assert '"topic":"alerts"' in redis.published[0][1]

@@ -7,7 +7,6 @@
 """
 
 import asyncio
-import os
 
 from app.core.config import get_settings
 from app.core.db import Database
@@ -16,8 +15,9 @@ from app.services.auth_service import AuthService
 
 async def seed_admin() -> None:
     settings = get_settings()
-    username = os.getenv("YIMAI_SEED_ADMIN_USER", "admin")
-    password = os.getenv("YIMAI_SEED_ADMIN_PASSWORD", "admin")
+    settings.validate_for_runtime()
+    username = settings.seed_admin_user
+    password = settings.seed_admin_password
 
     db = Database(settings.database_url, echo=settings.db_echo, pool_size=settings.db_pool_size)
     try:

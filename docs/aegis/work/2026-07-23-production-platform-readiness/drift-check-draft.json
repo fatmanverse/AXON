@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-07-23-production-platform-readiness",
+  "taskIntentRef": "docs/aegis/work/2026-07-23-production-platform-readiness/task-intent-draft.json",
+  "baselineRefs": [
+    "docs/aegis/specs/2026-07-23-full-platform-production-readiness-design.md"
+  ],
+  "scopeStatus": "实现仍在 backend/frontend/agent/ops/docs 既有 owner 边界内；未修改 live data",
+  "compatStatus": "CI、artifact deploy、rollback、approval、SSH、Alembic revision IDs 保持兼容；Agent 多副本新增 Redis owner 路由",
+  "retirementStatus": "进程内 Agent owner 不再承担生产跨副本权威；旧 insecure/default 路径仅保留显式 dev/test",
+  "newRiskSignals": [
+    "真实 Redis/PostgreSQL/Kubernetes/Argo/LB/Agent/OIDC smoke 与 Go 1.25 尚未执行"
+  ],
+  "decision": "needs-verification"
+}

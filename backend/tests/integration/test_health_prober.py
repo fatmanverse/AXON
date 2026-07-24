@@ -55,18 +55,14 @@ async def test_http_probe_pass_on_expected_status():
 
 async def test_http_probe_fail_on_wrong_status():
     prober = DefaultHealthProber(http_factory=lambda: _FakeHttp(503))
-    ok, _ = await prober.probe(
-        {"type": "http", "url": "http://x", "expect_status": 200}
-    )
+    ok, _ = await prober.probe({"type": "http", "url": "http://x", "expect_status": 200})
     assert not ok
 
 
 async def test_command_probe_pass_on_expected_exit():
     ex = _FakeExecutor(0)
     prober = DefaultHealthProber(executor_factory=lambda: ex)
-    ok, _ = await prober.probe(
-        {"type": "command", "command": "systemctl is-active billing"}
-    )
+    ok, _ = await prober.probe({"type": "command", "command": "systemctl is-active billing"})
     assert ok
     assert ex.ran == ["systemctl is-active billing"]
 

@@ -1,0 +1,346 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: axon-system
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: axon-config
+  namespace: axon-system
+data:
+  YIMAI_ENV: prod
+  YIMAI_LOG_JSON: "true"
+  YIMAI_COORDINATION_BACKEND: redis
+  YIMAI_CORS_ORIGINS: '["https://axon.example.com"]'
+  YIMAI_K8S_ENABLED: "true"
+  YIMAI_K8S_IN_CLUSTER: "true"
+  YIMAI_AGENT_GRPC_ENABLED: "true"
+  YIMAI_AGENT_GRPC_TLS_ENABLED: "true"
+  YIMAI_AGENT_GRPC_SERVER_CERT_FILE: /etc/axon/agent-tls/tls.crt
+  YIMAI_AGENT_GRPC_SERVER_KEY_FILE: /etc/axon/agent-tls/tls.key
+  YIMAI_AGENT_GRPC_CLIENT_CA_FILE: /etc/axon/agent-tls/ca.crt
+  YIMAI_AGENT_GRPC_SERVER_ADDRESS: agent-grpc.example.com:50051
+  YIMAI_BUILD_WORKSPACE_DIR: /var/lib/axon/builds
+  YIMAI_BUILD_ARTIFACTS_DIR: /var/lib/axon/artifacts
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: axon-artifacts
+  namespace: axon-system
+spec:
+  accessModes: [ReadWriteMany]
+  resources:
+    requests: {storage: 200Gi}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: axon-builds
+  namespace: axon-system
+spec:
+  accessModes: [ReadWriteMany]
+  resources:
+    requests: {storage: 100Gi}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: axon-api
+  namespace: axon-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: axon-api
+  namespace: axon-system
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: axon-api}
+  template:
+    metadata:
+      labels: {app: axon-api}
+    spec:
+      serviceAccountName: axon-api
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: api
+          image: registry.example.com/axon/backend:REPLACE_ME
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: {name: axon-config}
+            - secretRef: {name: axon-secrets}
+          ports:
+            - {name: http, containerPort: 8000}
+            - {name: agent-grpc, containerPort: 50051}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 20
+            timeoutSeconds: 3
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {cpu: "1", memory: 1Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: artifacts, mountPath: /var/lib/axon/artifacts}
+            - {name: builds, mountPath: /var/lib/axon/builds}
+            - {name: agent-tls, mountPath: /etc/axon/agent-tls, readOnly: true}
+      volumes:
+        - {name: tmp, emptyDir: {sizeLimit: 256Mi}}
+        - {name: artifacts, persistentVolumeClaim: {claimName: axon-artifacts}}
+        - {name: builds, persistentVolumeClaim: {claimName: axon-builds}}
+        - {name: agent-tls, secret: {secretName: axon-agent-tls}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: axon-system
+spec:
+  selector: {app: axon-api}
+  ports:
+    - {name: http, port: 8000, targetPort: http}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: axon-agent-grpc
+  namespace: axon-system
+spec:
+  type: LoadBalancer
+  selector: {app: axon-api}
+  ports:
+    - {name: agent-grpc, port: 50051, targetPort: agent-grpc}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: axon-worker
+  namespace: axon-system
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: axon-worker}
+  template:
+    metadata:
+      labels: {app: axon-worker}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: worker
+          image: registry.example.com/axon/backend:REPLACE_ME
+          command: [celery, -A, app.workers.celery_app, worker, --loglevel=info, --concurrency=4]
+          envFrom:
+            - configMapRef: {name: axon-config}
+            - secretRef: {name: axon-secrets}
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {cpu: "2", memory: 2Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: artifacts, mountPath: /var/lib/axon/artifacts}
+            - {name: builds, mountPath: /var/lib/axon/builds}
+      volumes:
+        - {name: tmp, emptyDir: {sizeLimit: 256Mi}}
+        - {name: artifacts, persistentVolumeClaim: {claimName: axon-artifacts}}
+        - {name: builds, persistentVolumeClaim: {claimName: axon-builds}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: axon-beat
+  namespace: axon-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: axon-beat}
+  template:
+    metadata:
+      labels: {app: axon-beat}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: beat
+          image: registry.example.com/axon/backend:REPLACE_ME
+          command: [celery, -A, app.workers.celery_app, beat, --loglevel=info, --schedule=/var/lib/axon/celerybeat-schedule]
+          envFrom:
+            - configMapRef: {name: axon-config}
+            - secretRef: {name: axon-secrets}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: state, mountPath: /var/lib/axon}
+      volumes:
+        - {name: state, emptyDir: {sizeLimit: 64Mi}}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: axon-migrate
+  namespace: axon-system
+spec:
+  backoffLimit: 3
+  template:
+    metadata: {labels: {app: axon-migrate}}
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: migrate
+          image: registry.example.com/axon/backend:REPLACE_ME
+          command: [sh, -c, "alembic upgrade head && python -m app.cli.seed"]
+          envFrom:
+            - configMapRef: {name: axon-config}
+            - secretRef: {name: axon-secrets}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: tmp, emptyDir: {sizeLimit: 64Mi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: axon-frontend
+  namespace: axon-system
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: axon-frontend}
+  template:
+    metadata:
+      labels: {app: axon-frontend}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: frontend
+          image: registry.example.com/axon/frontend:REPLACE_ME
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /, port: http}}
+          livenessProbe: {httpGet: {path: /, port: http}}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: nginx-cache, mountPath: /var/cache/nginx}
+            - {name: nginx-run, mountPath: /var/run}
+            - {name: nginx-tmp, mountPath: /tmp}
+      volumes:
+        - {name: nginx-cache, emptyDir: {sizeLimit: 64Mi}}
+        - {name: nginx-run, emptyDir: {sizeLimit: 8Mi}}
+        - {name: nginx-tmp, emptyDir: {sizeLimit: 64Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: axon-frontend
+  namespace: axon-system
+spec:
+  selector: {app: axon-frontend}
+  ports: [{name: http, port: 80, targetPort: http}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: axon
+  namespace: axon-system
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [axon.example.com]
+      secretName: axon-ingress-tls
+  rules:
+    - host: axon.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: axon-frontend, port: {name: http}}}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: axon-api
+  namespace: axon-system
+spec:
+  minAvailable: 1
+  selector: {matchLabels: {app: axon-api}}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: axon-api
+  namespace: axon-system
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: axon-api}
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: axon-rollout-manager
+  namespace: axon-system
+rules:
+  - apiGroups: [apps]
+    resources: [deployments, deployments/scale]
+    verbs: [get, list, watch, patch, update, delete]
+  - apiGroups: [argoproj.io]
+    resources: [rollouts]
+    verbs: [get, list, watch, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: axon-rollout-manager
+  namespace: axon-system
+subjects:
+  - kind: ServiceAccount
+    name: axon-api
+    namespace: axon-system
+roleRef:
+  kind: Role
+  name: axon-rollout-manager
+  apiGroup: rbac.authorization.k8s.io

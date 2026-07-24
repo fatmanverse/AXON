@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "final-backend-frontend",
+  "type": "command",
+  "source": "backend/tests,frontend/tests,Makefile",
+  "summary": "后端 648 passed/4 socket-boundary skipped, coverage 84.42%;前端 70 passed; Ruff/Black/ESLint/Prettier/TypeScript build passed",
+  "verifier": "make backend-test; make backend-lint; cd frontend && npm test && npm run lint && npm run format:check && npm run build"
+}

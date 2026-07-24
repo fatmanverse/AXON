@@ -52,7 +52,7 @@ async def app_client(tmp_path):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
         log_json=False,
-        jwt_secret="itest-secret-config-apply",
+        jwt_secret="itest-secret-config-apply-at-least-32-bytes",
         secret_backend="local",
         secret_master_key="",
         rate_limit_enabled=False,

@@ -1,0 +1,25 @@
+[Unit]
+Description=Axon Control Plane API
+After=network-online.target axon-migrate.service
+Wants=network-online.target
+Requires=axon-migrate.service
+
+[Service]
+Type=exec
+User=axon
+Group=axon
+WorkingDirectory=/opt/axon/backend
+EnvironmentFile=/etc/axon/axon.env
+ExecStart=/opt/axon/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${AXON_API_WORKERS}
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/axon /var/log/axon
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

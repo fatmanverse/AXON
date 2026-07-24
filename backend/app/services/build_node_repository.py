@@ -1,10 +1,7 @@
-"""build_nodes 数据访问层(构建能力一期,§方案 A)。
-
-一期只跑控制面本地节点:ensure_local_node 幂等取/建名为 "control-plane" 的本地
-节点(server_id=None)。create/list/delete/get 支撑后续注册更多节点的架构预留。
-"""
+"""build_nodes 数据访问层与本地节点自举。"""
 
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -73,6 +70,13 @@ class BuildNodeRepository:
         node = await self.get(node_id)
         await self._session.delete(node)
         await self._session.flush()
+
+    async def mark_heartbeat(self, node_id: str) -> BuildNode:
+        node = await self.get(node_id)
+        node.status = BuildNodeStatus.ONLINE
+        node.last_heartbeat_at = datetime.now(UTC)
+        await self._session.flush()
+        return node
 
     async def _find_by_name(self, name: str) -> BuildNode | None:
         stmt = select(BuildNode).where(BuildNode.name == name)

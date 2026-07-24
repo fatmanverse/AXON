@@ -38,7 +38,7 @@ async def app_client():
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
         log_json=False,
-        jwt_secret="itest-secret-webhook",
+        jwt_secret="itest-secret-webhook-at-least-32-bytes",
         secret_backend="local",
         secret_master_key="",
         rate_limit_enabled=False,
@@ -96,9 +96,7 @@ def _payload(**overrides) -> dict:
 
 
 async def _token(client, username, password):
-    resp = await client.post(
-        "/api/auth/login", json={"username": username, "password": password}
-    )
+    resp = await client.post("/api/auth/login", json={"username": username, "password": password})
     return resp.json()["data"]["access_token"]
 
 

@@ -33,12 +33,48 @@ _QUOTED = re.compile(r"""(['"`])(?:\\.|(?!\1).)*\1""")
 # PromQL 关键字/聚合算子等非指标标识符,提取指标名时跳过,避免被误判为指标。
 _PROMQL_KEYWORDS = frozenset(
     {
-        "by", "without", "on", "ignoring", "group_left", "group_right",
-        "offset", "bool", "and", "or", "unless", "sum", "avg", "min", "max",
-        "count", "count_values", "stddev", "stdvar", "topk", "bottomk",
-        "quantile", "rate", "irate", "increase", "delta", "idelta", "deriv",
-        "predict_linear", "histogram_quantile", "abs", "ceil", "floor",
-        "round", "sqrt", "exp", "ln", "log2", "log10", "time", "inf", "nan",
+        "by",
+        "without",
+        "on",
+        "ignoring",
+        "group_left",
+        "group_right",
+        "offset",
+        "bool",
+        "and",
+        "or",
+        "unless",
+        "sum",
+        "avg",
+        "min",
+        "max",
+        "count",
+        "count_values",
+        "stddev",
+        "stdvar",
+        "topk",
+        "bottomk",
+        "quantile",
+        "rate",
+        "irate",
+        "increase",
+        "delta",
+        "idelta",
+        "deriv",
+        "predict_linear",
+        "histogram_quantile",
+        "abs",
+        "ceil",
+        "floor",
+        "round",
+        "sqrt",
+        "exp",
+        "ln",
+        "log2",
+        "log10",
+        "time",
+        "inf",
+        "nan",
     }
 )
 
@@ -109,7 +145,7 @@ class MetricsService:
             if token in _PROMQL_KEYWORDS:
                 continue
             # 紧跟 '(' 的是函数调用名,不是指标
-            tail = sanitized[match.end():].lstrip()
+            tail = sanitized[match.end() :].lstrip()
             if tail.startswith("("):
                 continue
             names.append(token)

@@ -21,6 +21,10 @@ from enum import StrEnum
 from typing import Protocol
 
 
+class AgentRoutingError(RuntimeError):
+    """共享 Agent 连接路由不可用。"""
+
+
 class AgentMessageKind(StrEnum):
     """Agent → 控制面的上报类型(§15.5 AgentMessage.payload)。"""
 
@@ -105,6 +109,26 @@ class AgentConnectionManager:
     def on_message(self, handler: MessageHandler) -> None:
         """注册上报消息回调(AgentGateway 用它把 result ACK 落到 task 状态机)。"""
         self._handlers.append(handler)
+
+    async def start(self) -> None:
+        """启动连接管理器。内存实现无需后台资源,供 Redis 实现统一生命周期。"""
+
+    async def stop(self) -> None:
+        """停止连接管理器。内存实现无需后台资源,供 Redis 实现统一生命周期。"""
+
+    async def register_connection(
+        self, agent_id: str, transport: CommandTransport, *, now: float
+    ) -> None:
+        """异步登记连接,保持内存与 Redis 实现使用同一 owner API。"""
+        self.register(agent_id, transport, now=now)
+
+    async def heartbeat_connection(self, agent_id: str, *, now: float) -> None:
+        """异步刷新心跳,保持内存与 Redis 实现使用同一 owner API。"""
+        self.heartbeat(agent_id, now=now)
+
+    async def unregister_connection(self, agent_id: str) -> None:
+        """异步摘除连接,保持内存与 Redis 实现使用同一 owner API。"""
+        self.unregister(agent_id)
 
     async def handle_inbound(self, message: AgentMessage) -> None:
         """处理一条 Agent 上报:心跳刷新 last_seen,其余分发给已注册回调。"""

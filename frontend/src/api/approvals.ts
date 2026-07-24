@@ -27,7 +27,9 @@ export function listApprovals(env?: string): Promise<Approval[]> {
   return api.get<Approval[]>("/api/approvals", { params: env ? { env } : undefined });
 }
 
-export function approveApproval(approvalId: string): Promise<{ approval_id: string; task_id: string; status: string }> {
+export function approveApproval(
+  approvalId: string,
+): Promise<{ approval_id: string; task_id: string; status: string }> {
   return api.post(`/api/approvals/${approvalId}/approve`);
 }
 

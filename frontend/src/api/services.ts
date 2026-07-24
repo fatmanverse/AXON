@@ -65,10 +65,7 @@ export function createService(body: CreateServiceRequest): Promise<Service> {
 }
 
 /** start/stop/restart 走 POST /{id}/{action};delete 走 DELETE /{id}。 */
-export function runLifecycle(
-  serviceId: string,
-  action: LifecycleAction,
-): Promise<TaskAccepted> {
+export function runLifecycle(serviceId: string, action: LifecycleAction): Promise<TaskAccepted> {
   if (action === "delete") {
     return api.del<TaskAccepted>(`/api/services/${serviceId}`);
   }

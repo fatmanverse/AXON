@@ -39,9 +39,7 @@ class BuildNode(Base, TimestampMixin):
     __tablename__ = "build_nodes"
     # 挂靠的已纳管服务器唯一:一台 Server 至多登记为一个构建节点,避免重复挂靠。
     # server_id 为空(外部专用构建机)时不参与该唯一判定(NULL 不判重)。
-    __table_args__ = (
-        UniqueConstraint("server_id", name="uq_build_nodes_server"),
-    )
+    __table_args__ = (UniqueConstraint("server_id", name="uq_build_nodes_server"),)
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)

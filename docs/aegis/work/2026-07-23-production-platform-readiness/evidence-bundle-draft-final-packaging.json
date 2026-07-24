@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "final-packaging",
+  "type": "command",
+  "source": "ops/compose,ops/kubernetes,ops/systemd,ops/backup",
+  "summary": "Compose 基础与 Agent overlay config 解析成功；Kubernetes 18 文档解析成功；shell 脚本语法通过；RWX PVC、mTLS Secret、in-cluster client、Service DNS 已声明",
+  "verifier": "docker compose ... config --quiet; python yaml.safe_load_all; bash -n ops/*.sh"
+}

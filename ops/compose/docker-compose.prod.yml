@@ -1,0 +1,120 @@
+name: axon-prod
+
+x-backend: &backend
+  image: ${AXON_BACKEND_IMAGE:?AXON_BACKEND_IMAGE is required}
+  env_file: ${AXON_ENV_FILE:-../../.env.prod}
+  restart: unless-stopped
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  read_only: true
+  tmpfs:
+    - /tmp:size=256m,mode=1777
+  networks: [axon]
+
+services:
+  migrate:
+    <<: *backend
+    restart: "no"
+    command: ["sh", "-c", "alembic upgrade head && python -m app.cli.seed"]
+
+  api:
+    <<: *backend
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    expose:
+      - "8000"
+      - "50051"
+    volumes:
+      - axon_artifacts:/var/lib/axon/artifacts
+      - axon_builds:/var/lib/axon/builds
+      - axon_dist:/var/lib/axon/dist:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits: {cpus: "1.0", memory: 1g}
+        reservations: {memory: 512m}
+
+  worker:
+    <<: *backend
+    command:
+      [
+        "celery",
+        "-A",
+        "app.workers.celery_app",
+        "worker",
+        "--loglevel=info",
+        "--concurrency=${CELERY_CONCURRENCY:-4}",
+      ]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - axon_artifacts:/var/lib/axon/artifacts
+      - axon_builds:/var/lib/axon/builds
+      - axon_dist:/var/lib/axon/dist:ro
+    deploy:
+      resources:
+        limits: {cpus: "2.0", memory: 2g}
+        reservations: {memory: 1g}
+
+  beat:
+    <<: *backend
+    command:
+      [
+        "celery",
+        "-A",
+        "app.workers.celery_app",
+        "beat",
+        "--loglevel=info",
+        "--schedule=/tmp/celerybeat-schedule",
+      ]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits: {cpus: "0.5", memory: 512m}
+
+  frontend:
+    image: ${AXON_FRONTEND_IMAGE:?AXON_FRONTEND_IMAGE is required}
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=64m
+      - /var/run:size=8m
+      - /tmp:size=64m
+    ports:
+      - "${AXON_HTTP_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [axon]
+    deploy:
+      resources:
+        limits: {cpus: "0.5", memory: 256m}
+
+networks:
+  axon:
+    driver: bridge
+
+volumes:
+  axon_artifacts:
+  axon_builds:
+  axon_dist:

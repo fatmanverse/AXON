@@ -71,7 +71,7 @@ async def app_client():
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
         log_json=False,
-        jwt_secret="itest-secret-build",
+        jwt_secret="itest-secret-build-at-least-32-bytes",
         secret_backend="local",
         secret_master_key="",
         rate_limit_enabled=False,
@@ -111,9 +111,7 @@ async def _seed_service(app, *, env="prod", build_config=_BUILD_CONFIG) -> str:
 
 
 async def _token(client, username, password) -> str:
-    resp = await client.post(
-        "/api/auth/login", json={"username": username, "password": password}
-    )
+    resp = await client.post("/api/auth/login", json={"username": username, "password": password})
     return resp.json()["data"]["access_token"]
 
 
@@ -126,9 +124,7 @@ async def test_build_returns_task_and_marks_success(app_client):
     service_id = await _seed_service(app)
     token = await _token(client, "operator", "op-pw")
 
-    resp = await client.post(
-        f"/api/services/{service_id}/build", headers=_auth(token), json={}
-    )
+    resp = await client.post(f"/api/services/{service_id}/build", headers=_auth(token), json={})
 
     assert resp.status_code == 202
     task_id = resp.json()["data"]["task_id"]
@@ -166,9 +162,7 @@ async def test_build_without_config_returns_501(app_client):
     service_id = await _seed_service(app, build_config=None)
     token = await _token(client, "operator", "op-pw")
 
-    resp = await client.post(
-        f"/api/services/{service_id}/build", headers=_auth(token), json={}
-    )
+    resp = await client.post(f"/api/services/{service_id}/build", headers=_auth(token), json={})
     assert resp.status_code == 501
 
 
@@ -177,9 +171,7 @@ async def test_build_developer_forbidden_on_prod(app_client):
     service_id = await _seed_service(app, env="prod")
     token = await _token(client, "dev", "dev-pw")
 
-    resp = await client.post(
-        f"/api/services/{service_id}/build", headers=_auth(token), json={}
-    )
+    resp = await client.post(f"/api/services/{service_id}/build", headers=_auth(token), json={})
     assert resp.status_code == 403
 
 
@@ -188,9 +180,7 @@ async def test_build_developer_allowed_on_dev(app_client):
     service_id = await _seed_service(app, env="dev")
     token = await _token(client, "dev", "dev-pw")
 
-    resp = await client.post(
-        f"/api/services/{service_id}/build", headers=_auth(token), json={}
-    )
+    resp = await client.post(f"/api/services/{service_id}/build", headers=_auth(token), json={})
     assert resp.status_code == 202
 
 
@@ -206,9 +196,7 @@ async def test_build_unknown_service_404(app_client):
     client, _, app = app_client
     token = await _token(client, "operator", "op-pw")
 
-    resp = await client.post(
-        "/api/services/nope/build", headers=_auth(token), json={}
-    )
+    resp = await client.post("/api/services/nope/build", headers=_auth(token), json={})
     assert resp.status_code == 404
 
 
@@ -236,7 +224,5 @@ async def test_registry_crud(app_client):
     listed = await client.get("/api/artifact-registries", headers=_auth(token))
     assert any(r["id"] == registry_id for r in listed.json()["data"])
 
-    deleted = await client.delete(
-        f"/api/artifact-registries/{registry_id}", headers=_auth(token)
-    )
+    deleted = await client.delete(f"/api/artifact-registries/{registry_id}", headers=_auth(token))
     assert deleted.json()["data"]["deleted"] is True

@@ -79,9 +79,7 @@ export function TableToolbar({
     >
       <Space size="middle" wrap>
         {title != null && (
-          <span style={{ fontSize: 15, fontWeight: 600, color: colors.textTitle }}>
-            {title}
-          </span>
+          <span style={{ fontSize: 15, fontWeight: 600, color: colors.textTitle }}>{title}</span>
         )}
         {filters}
       </Space>

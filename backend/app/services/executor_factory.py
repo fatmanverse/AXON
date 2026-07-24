@@ -14,7 +14,11 @@ from typing import Any
 
 from app.adapters.agent_gateway import AgentGateway
 from app.adapters.agent_gateway_registry import AgentGatewayRegistry
-from app.adapters.artifact_transfer import SshArtifactTransfer
+from app.adapters.artifact_transfer import (
+    AgentArtifactTransfer,
+    ArtifactTransfer,
+    SshArtifactTransfer,
+)
 from app.adapters.executor import Executor
 from app.adapters.ssh_executor import SSHExecutor, SSHTarget
 from app.core.errors import AppError
@@ -66,20 +70,20 @@ def build_artifact_transfer_for_server(
     secrets: SecretStore,
     *,
     connector: Callable[..., Any] | None = None,
-) -> SshArtifactTransfer:
-    """为 SSH 模式 server 构造 SFTP 制品传输器。
+    agent_registry: AgentGatewayRegistry | None = None,
+) -> ArtifactTransfer:
+    """按 server.access_mode 构造制品传输器。
 
-    Agent 接入模式暂不支持 artifact 传输（SFTP 经控制面直连目标机，
-    与 agent 旁路下发命令的通道不兼容）；明确抛 501 而非静默失败，
-    让调用方在下发 runtime 动作前就拒绝该路径。
+    Agent 模式经已认证 Agent 流分块传输；未启用注册表时明确抛 501。
     """
     if server.access_mode == AccessMode.AGENT:
-        raise AppError(
-            "artifact_transfer_not_supported",
-            "Agent 接入模式暂不支持制品传输，请改用 SSH 模式接入",
-            status_code=501,
-        )
+        if agent_registry is None or not server.agent_id:
+            raise AppError(
+                "artifact_transfer_not_configured",
+                "Agent 制品传输未配置，请启用 Agent gRPC 并等待 Agent 上线",
+                status_code=501,
+            )
+        return AgentArtifactTransfer(agent_registry.for_agent(server.agent_id))
 
     target = build_ssh_target_for_server(server)
     return SshArtifactTransfer(target, secrets, connector=connector)
-

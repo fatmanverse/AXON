@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import shlex
+from collections.abc import Sequence
 
 from app.adapters.executor import Executor
 from app.core.errors import AppError
@@ -28,13 +29,16 @@ def _bootstrap_script(
     version: str,
     install_dir: str = "/usr/local/bin",
     service_name: str = "axon-agent",
+    exec_args: Sequence[str] = (),
 ) -> str:
     """生成幂等安装脚本。download_url/版本/路径经 shlex.quote 转义防注入。"""
     q_url = shlex.quote(download_url)
     q_bin = shlex.quote(f"{install_dir}/{service_name}")
     q_svc = shlex.quote(service_name)
     unit_path = f"/etc/systemd/system/{service_name}.service"
-    exec_start = f"{install_dir}/{service_name}"
+    exec_start = " ".join(
+        [shlex.quote(f"{install_dir}/{service_name}"), *(shlex.quote(arg) for arg in exec_args)]
+    )
     return (
         "set -e; "
         f"if command -v {service_name} >/dev/null 2>&1; then "
@@ -68,6 +72,7 @@ class AgentInstaller:
         version: str,
         install_dir: str = "/usr/local/bin",
         service_name: str = "axon-agent",
+        exec_args: Sequence[str] = (),
     ) -> None:
         """确保目标机装好并运行 axon-agent。失败抛 AppError。"""
         script = _bootstrap_script(
@@ -75,6 +80,7 @@ class AgentInstaller:
             version=version,
             install_dir=install_dir,
             service_name=service_name,
+            exec_args=exec_args,
         )
         result = await self._executor.exec(script)
         if not result.succeeded:

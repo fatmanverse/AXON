@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "phase0-identity-green",
+  "type": "command",
+  "source": "backend/app/api/auth.py, backend/app/services/auth_service.py, backend/app/core/security.py, backend/app/models/user.py, backend/alembic/versions/user_auth_lifecycle.py",
+  "summary": "Identity lifecycle: failed-login lockout, password change, token-version revocation, logout, app-state Settings owner and migration",
+  "verifier": "auth integration: 8 passed; targeted Ruff/Black passed; fresh SQLite upgrade and downgrade passed; make gen-api passed"
+}

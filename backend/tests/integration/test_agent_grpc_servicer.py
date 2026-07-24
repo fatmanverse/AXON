@@ -30,10 +30,16 @@ from app.services.agent_grpc import AgentServicer
 
 
 class _FakeContext:
-    """最小 grpc.aio.ServicerContext 替身:仅承载对端信息,测试不校验。"""
+    """最小 grpc.aio.ServicerContext 替身。"""
+
+    def __init__(self, identities: tuple[bytes, ...] = ()) -> None:
+        self._identities = identities
 
     def peer(self) -> str:
         return "ipv4:10.0.0.9:5000"
+
+    def peer_identities(self) -> tuple[bytes, ...]:
+        return self._identities
 
 
 async def _drain_commands(response_iter, sink: list, *, stop: asyncio.Event) -> None:
@@ -164,4 +170,36 @@ async def test_first_message_without_agent_id_aborts():
 
     with pytest.raises(Exception):  # noqa: B017 - 具体异常类型由实现决定,这里只验证拒绝
         async for _ in servicer.Connect(request_iter(), _FakeContext()):
+            pass
+
+
+async def test_mtls_identity_must_match_claimed_agent_id():
+    mgr = AgentConnectionManager()
+    servicer = AgentServicer(mgr, require_client_identity=True)
+
+    async def request_iter():
+        yield agent_pb2.AgentMessage(
+            agent_id="agent-1", heartbeat=agent_pb2.Heartbeat(agent_version="1.0.0")
+        )
+
+    with pytest.raises(PermissionError, match="不匹配"):
+        async for _ in servicer.Connect(request_iter(), _FakeContext((b"different-agent",))):
+            pass
+
+
+async def test_revoked_agent_identity_is_rejected():
+    mgr = AgentConnectionManager()
+    servicer = AgentServicer(
+        mgr,
+        require_client_identity=True,
+        revoked_agent_ids=frozenset({"agent-1"}),
+    )
+
+    async def request_iter():
+        yield agent_pb2.AgentMessage(
+            agent_id="agent-1", heartbeat=agent_pb2.Heartbeat(agent_version="1.0.0")
+        )
+
+    with pytest.raises(PermissionError, match="已吊销"):
+        async for _ in servicer.Connect(request_iter(), _FakeContext((b"agent-1",))):
             pass

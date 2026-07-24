@@ -124,6 +124,21 @@ async def test_reconcile_leaves_still_running(db):
     assert dep.status == DeploymentStatus.RUNNING
 
 
+async def test_reconcile_skips_service_without_pipeline_provider(db):
+    service_id = await _seed_service(db)
+    dep_id = await _running_deploy(db, service_id, pipeline_id="run-unconfigured")
+
+    reconciler = DeployReconciler(db, adapter_provider=lambda _s: None)
+    result = await reconciler.reconcile_once()
+
+    assert result.scanned == 1
+    assert result.reconciled == 0
+    assert result.failed == 0
+    async with db.session() as session:
+        dep = await DeploymentRepository(session).get(dep_id)
+    assert dep.status == DeploymentStatus.RUNNING
+
+
 async def test_reconcile_skips_running_without_pipeline_id(db):
     service_id = await _seed_service(db)
     await _running_deploy(db, service_id, pipeline_id=None)

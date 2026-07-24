@@ -54,7 +54,7 @@ async def app_client(monkeypatch, tmp_path):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
         log_json=False,
-        jwt_secret="itest-secret-servers",
+        jwt_secret="itest-secret-servers-at-least-32-bytes",
         secret_backend="local",
         secret_master_key="",  # 自动生成
         rate_limit_enabled=False,

@@ -62,11 +62,7 @@ export function LoginPage(): React.ReactElement {
         variant="borderless"
       >
         <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <img
-            src={logoSidebar}
-            alt="一脉 Axon"
-            style={{ height: 32, filter: "invert(0.15)" }}
-          />
+          <img src={logoSidebar} alt="一脉 Axon" style={{ height: 32, filter: "invert(0.15)" }} />
           <div
             style={{
               marginTop: 10,
@@ -88,20 +84,10 @@ export function LoginPage(): React.ReactElement {
           />
         )}
         <Form<LoginForm> layout="vertical" onFinish={handleSubmit} requiredMark={false}>
-          <Form.Item
-            name="username"
-            rules={[{ required: true, message: "请输入用户名" }]}
-          >
-            <Input
-              prefix={<UserOutlined />}
-              placeholder="用户名"
-              autoComplete="username"
-            />
+          <Form.Item name="username" rules={[{ required: true, message: "请输入用户名" }]}>
+            <Input prefix={<UserOutlined />} placeholder="用户名" autoComplete="username" />
           </Form.Item>
-          <Form.Item
-            name="password"
-            rules={[{ required: true, message: "请输入密码" }]}
-          >
+          <Form.Item name="password" rules={[{ required: true, message: "请输入密码" }]}>
             <Input.Password
               prefix={<LockOutlined />}
               placeholder="密码"
@@ -109,12 +95,7 @@ export function LoginPage(): React.ReactElement {
             />
           </Form.Item>
           <Form.Item style={{ marginBottom: 0 }}>
-            <Button
-              type="primary"
-              htmlType="submit"
-              block
-              loading={status === "loading"}
-            >
+            <Button type="primary" htmlType="submit" block loading={status === "loading"}>
               登录
             </Button>
           </Form.Item>

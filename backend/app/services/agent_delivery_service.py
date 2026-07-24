@@ -64,9 +64,7 @@ class AgentDeliveryService:
             message = exc.message if isinstance(exc, AppError) else str(exc)
             log.warning("agent_install_failed", server_id=server_id, error=message)
             async with self._db.session() as session:
-                await TaskRepository(session).mark_result(
-                    task_id, TaskStatus.FAILED, error=message
-                )
+                await TaskRepository(session).mark_result(task_id, TaskStatus.FAILED, error=message)
             return
 
         async with self._db.session() as session:
@@ -80,14 +78,56 @@ class AgentDeliveryService:
             server = await ServerRepository(session).get(server_id)
             self._require_ssh(server)
             executor = self._build_executor(server)
+            agent_id = str((server.labels or {}).get("agent_id") or f"server-{server.id}")
 
         installer = AgentInstaller(executor)
+        exec_args = self._agent_exec_args(agent_id)
         await installer.ensure_installed(
             download_url=agent_download_url(self._settings),
             version=self._settings.agent_version,
             install_dir=self._settings.agent_install_dir,
             service_name=self._settings.agent_service_name,
+            exec_args=exec_args,
         )
+
+    def _agent_exec_args(self, agent_id: str) -> list[str]:
+        settings = self._settings
+        server_address = settings.agent_grpc_server_address or "127.0.0.1:50051"
+        args = ["--agent-id", agent_id, "--server", server_address]
+        if settings.agent_grpc_tls_enabled:
+            args.extend(
+                [
+                    "--tls-ca",
+                    settings.agent_grpc_client_ca_path,
+                    "--tls-cert",
+                    settings.agent_grpc_client_cert_path,
+                    "--tls-key",
+                    settings.agent_grpc_client_key_path,
+                ]
+            )
+            if settings.agent_grpc_client_server_name:
+                args.extend(["--tls-server-name", settings.agent_grpc_client_server_name])
+        elif settings.agent_insecure_install:
+            args.append("--insecure")
+        else:
+            raise AppError(
+                "agent_install_transport_not_configured",
+                "Agent 安装未配置 TLS；开发环境需显式开启 agent_insecure_install",
+                status_code=409,
+            )
+        args.extend(
+            [
+                "--artifact-staging-dir",
+                settings.agent_artifact_staging_dir,
+                "--artifact-max-bytes",
+                str(settings.agent_artifact_max_bytes),
+                "--artifact-chunk-max-bytes",
+                str(settings.agent_artifact_chunk_bytes),
+                "--config-roots",
+                ",".join(settings.agent_config_roots),
+            ]
+        )
+        return args
 
     @staticmethod
     def _require_ssh(server: Server) -> None:

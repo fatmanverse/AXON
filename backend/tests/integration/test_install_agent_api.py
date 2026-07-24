@@ -51,12 +51,13 @@ async def app_client(monkeypatch, tmp_path):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
         log_json=False,
-        jwt_secret="itest-install-agent",
+        jwt_secret="itest-install-agent-at-least-32-bytes",
         secret_backend="local",
         secret_master_key="",
         rate_limit_enabled=False,
         prometheus_targets_file=str(tmp_path / "nodes.json"),
         control_plane_base_url="http://cp:8000",
+        agent_insecure_install=True,
     )
     app: FastAPI = create_app(settings)
     monkeypatch.setattr(ssh_executor, "_default_connector", lambda **_: _FakeConnection(ok=True))

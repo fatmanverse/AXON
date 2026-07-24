@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "phase0-config-tests",
+  "type": "command",
+  "source": "backend/tests/unit/test_config.py",
+  "summary": "生产配置 fail-fast RED/GREEN: default JWT, local secret backend/default seed rejection and valid prod config pass",
+  "verifier": "uv run pytest tests/unit/test_config.py -q: 5 passed"
+}

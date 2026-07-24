@@ -120,6 +120,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change Password */
+        post: operations["change_password_api_auth_change_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/login": {
         parameters: {
             query?: never;
@@ -131,6 +148,23 @@ export interface paths {
         put?: never;
         /** Login */
         post: operations["login_api_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Logout */
+        post: operations["logout_api_auth_logout_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -184,6 +218,23 @@ export interface paths {
         post?: never;
         /** Delete Build Node */
         delete: operations["delete_build_node_api_build_nodes__node_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/build-nodes/{node_id}/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Heartbeat Build Node */
+        post: operations["heartbeat_build_node_api_build_nodes__node_id__heartbeat_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -899,7 +950,7 @@ export interface components {
         ArtifactRegistryType: "docker" | "generic";
         /**
          * BuildNodeCreate
-         * @description 注册构建节点入参(架构预留:一期只跑本地节点,此为后续注册用)。
+         * @description 注册本地或 SSH 构建节点；外部节点需提供 host 与凭证引用。
          */
         BuildNodeCreate: {
             /** Host */
@@ -929,6 +980,13 @@ export interface components {
             git_ref?: string | null;
             /** Version */
             version?: string | null;
+        };
+        /** ChangePasswordRequest */
+        ChangePasswordRequest: {
+            /** Current Password */
+            current_password: string;
+            /** New Password */
+            new_password: string;
         };
         /**
          * ConfigFormat
@@ -1354,6 +1412,41 @@ export interface operations {
             };
         };
     };
+    change_password_api_auth_change_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     login_api_auth_login_post: {
         parameters: {
             query?: never;
@@ -1385,6 +1478,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logout_api_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -1469,6 +1584,39 @@ export interface operations {
         };
     };
     delete_build_node_api_build_nodes__node_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    heartbeat_build_node_api_build_nodes__node_id__heartbeat_post: {
         parameters: {
             query?: never;
             header?: never;

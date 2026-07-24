@@ -78,9 +78,7 @@ class Build(Base, TimestampMixin):
     # 外部 CI 上报幂等键(语义同 uq_deployments_idempotency):同一 (pipeline_id,
     # service_id, git_sha) 只留一条;pipeline_id 为 NULL(本地构建)不参与判定。
     __table_args__ = (
-        UniqueConstraint(
-            "pipeline_id", "service_id", "git_sha", name="uq_builds_idempotency"
-        ),
+        UniqueConstraint("pipeline_id", "service_id", "git_sha", name="uq_builds_idempotency"),
     )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)

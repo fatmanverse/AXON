@@ -194,7 +194,12 @@ class ArtifactDeploymentService:
         cleanup 失败只记 warning，不覆盖部署成功结论。
         """
         remote_path = f"{_REMOTE_TMP_DIR}/{deploy_input.artifact_id}.tar.gz"
-        transfer = self._transfer_factory(server, self._secrets, connector=self._connector)
+        transfer = self._transfer_factory(
+            server,
+            self._secrets,
+            connector=self._connector,
+            agent_registry=self._agent_registry,
+        )
         executor = self._build_executor(server)
 
         upload_ok = False

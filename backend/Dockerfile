@@ -19,6 +19,10 @@ COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./
 
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin axon \
+    && chown -R axon:axon /app
+USER axon
+
 ENV PATH="/app/.venv/bin:${PATH}"
 
 EXPOSE 8000

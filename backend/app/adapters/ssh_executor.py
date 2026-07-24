@@ -193,6 +193,22 @@ class SSHExecutor(Executor):
         command = f"printf %s {shlex.quote(encoded)} | base64 -d > {shlex.quote(path)}"
         return await self.exec(command)
 
+    async def download_artifact(self, remote_path: str, local_path: str) -> None:
+        """从 SSH 构建节点通过 SFTP 回传 generic 制品到控制面。"""
+        import pathlib
+
+        pathlib.Path(local_path).parent.mkdir(parents=True, exist_ok=True)
+        try:
+            async with self._connect() as conn:
+                async with conn.start_sftp_client() as sftp:
+                    await sftp.get(remote_path, local_path)
+        except Exception as exc:
+            raise AppError(
+                "build_artifact_fetch_failed",
+                f"构建制品回传失败: {exc}",
+                status_code=502,
+            ) from exc
+
     async def get_service_status(self, service_ref: str) -> ServiceStatus:
         result = await self.exec(f"systemctl is-active {shlex.quote(service_ref)}")
         running = result.stdout.strip() == "active"

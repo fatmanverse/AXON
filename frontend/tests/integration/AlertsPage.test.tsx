@@ -94,9 +94,7 @@ describe("AlertsPage", () => {
     await user.click(screen.getByText("触发中", { selector: ".ant-segmented-item-label" }));
 
     await waitFor(() => {
-      expect(
-        mock.history.get.some((r) => r.params?.status === "firing"),
-      ).toBe(true);
+      expect(mock.history.get.some((r) => r.params?.status === "firing")).toBe(true);
     });
   });
 

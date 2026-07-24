@@ -48,15 +48,21 @@ async def test_duplicate_fingerprint_updates_same_row(db):
     async with db.session() as session:
         repo = AlertRepository(session)
         first = await repo.upsert_from_alert(
-            fingerprint="fp1", service="billing", severity=AlertSeverity.WARNING,
-            summary="内存高", status=AlertStatus.FIRING,
+            fingerprint="fp1",
+            service="billing",
+            severity=AlertSeverity.WARNING,
+            summary="内存高",
+            status=AlertStatus.FIRING,
         )
         first_id = first.id
     async with db.session() as session:
         repo = AlertRepository(session)
         second = await repo.upsert_from_alert(
-            fingerprint="fp1", service="billing", severity=AlertSeverity.WARNING,
-            summary="内存高", status=AlertStatus.FIRING,
+            fingerprint="fp1",
+            service="billing",
+            severity=AlertSeverity.WARNING,
+            summary="内存高",
+            status=AlertStatus.FIRING,
         )
         assert second.id == first_id
         rows = await repo.list_alerts()
@@ -68,14 +74,21 @@ async def test_resolve_fills_resolved_at(db):
     async with db.session() as session:
         repo = AlertRepository(session)
         await repo.upsert_from_alert(
-            fingerprint="fp1", service="billing", severity=AlertSeverity.CRITICAL,
-            summary="宕机", status=AlertStatus.FIRING,
+            fingerprint="fp1",
+            service="billing",
+            severity=AlertSeverity.CRITICAL,
+            summary="宕机",
+            status=AlertStatus.FIRING,
         )
     async with db.session() as session:
         repo = AlertRepository(session)
         resolved = await repo.upsert_from_alert(
-            fingerprint="fp1", service="billing", severity=AlertSeverity.CRITICAL,
-            summary="宕机", status=AlertStatus.RESOLVED, resolved_at=resolved_ts,
+            fingerprint="fp1",
+            service="billing",
+            severity=AlertSeverity.CRITICAL,
+            summary="宕机",
+            status=AlertStatus.RESOLVED,
+            resolved_at=resolved_ts,
         )
         assert resolved.status == AlertStatus.RESOLVED
         assert resolved.resolved_at is not None
@@ -85,12 +98,18 @@ async def test_list_by_status(db):
     async with db.session() as session:
         repo = AlertRepository(session)
         await repo.upsert_from_alert(
-            fingerprint="fp1", service="a", severity=AlertSeverity.CRITICAL,
-            summary="x", status=AlertStatus.FIRING,
+            fingerprint="fp1",
+            service="a",
+            severity=AlertSeverity.CRITICAL,
+            summary="x",
+            status=AlertStatus.FIRING,
         )
         await repo.upsert_from_alert(
-            fingerprint="fp2", service="b", severity=AlertSeverity.INFO,
-            summary="y", status=AlertStatus.RESOLVED,
+            fingerprint="fp2",
+            service="b",
+            severity=AlertSeverity.INFO,
+            summary="y",
+            status=AlertStatus.RESOLVED,
         )
         firing = await repo.list_alerts(status=AlertStatus.FIRING)
         assert len(firing) == 1
@@ -101,12 +120,18 @@ async def test_list_by_service(db):
     async with db.session() as session:
         repo = AlertRepository(session)
         await repo.upsert_from_alert(
-            fingerprint="fp1", service="billing", severity=AlertSeverity.WARNING,
-            summary="x", status=AlertStatus.FIRING,
+            fingerprint="fp1",
+            service="billing",
+            severity=AlertSeverity.WARNING,
+            summary="x",
+            status=AlertStatus.FIRING,
         )
         await repo.upsert_from_alert(
-            fingerprint="fp2", service="orders", severity=AlertSeverity.WARNING,
-            summary="y", status=AlertStatus.FIRING,
+            fingerprint="fp2",
+            service="orders",
+            severity=AlertSeverity.WARNING,
+            summary="y",
+            status=AlertStatus.FIRING,
         )
         rows = await repo.list_alerts(service="billing")
         assert len(rows) == 1

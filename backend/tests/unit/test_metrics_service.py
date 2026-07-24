@@ -86,9 +86,7 @@ async def test_overlong_query_rejected():
 async def test_query_range_also_validated():
     client = _FakeClient()
     with pytest.raises(AppError) as excinfo:
-        await _service(client).query_range(
-            "rm_rf_metric", start=1.0, end=2.0, step=15.0
-        )
+        await _service(client).query_range("rm_rf_metric", start=1.0, end=2.0, step=15.0)
 
     assert excinfo.value.code == "metric_not_allowed"
 

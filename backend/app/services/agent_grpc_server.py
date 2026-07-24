@@ -14,6 +14,8 @@ Agent 可主动外连建双向流。
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import grpc
 
 from app.core.logging import get_logger
@@ -34,11 +36,21 @@ class AgentGrpcServer:
         host: str = "0.0.0.0",  # noqa: S104 - Agent 从各内网机器外连,须监听全网卡
         port: int = 50051,
         grace_period: float = 5.0,
+        tls_enabled: bool = False,
+        server_cert_file: str = "",
+        server_key_file: str = "",
+        client_ca_file: str = "",
+        revoked_agent_ids: frozenset[str] = frozenset(),
     ) -> None:
         self._manager = manager
         self._host = host
         self._port = port
         self._grace = grace_period
+        self._tls_enabled = tls_enabled
+        self._server_cert_file = server_cert_file
+        self._server_key_file = server_key_file
+        self._client_ca_file = client_ca_file
+        self._revoked_agent_ids = revoked_agent_ids
         self._server: grpc.aio.Server | None = None
         self._bound_port: int | None = None
 
@@ -53,9 +65,30 @@ class AgentGrpcServer:
             return
         server = grpc.aio.server()
         agent_pb2_grpc.add_AgentServiceServicer_to_server(
-            AgentServicer(self._manager), server
+            AgentServicer(
+                self._manager,
+                require_client_identity=self._tls_enabled,
+                revoked_agent_ids=self._revoked_agent_ids,
+            ),
+            server,
         )
-        self._bound_port = server.add_insecure_port(f"{self._host}:{self._port}")
+        address = f"{self._host}:{self._port}"
+        if self._tls_enabled:
+            if not all((self._server_cert_file, self._server_key_file, self._client_ca_file)):
+                raise ValueError(
+                    "server_cert_file, server_key_file and client_ca_file are required for mTLS"
+                )
+            cert = Path(self._server_cert_file).read_bytes()
+            key = Path(self._server_key_file).read_bytes()
+            client_ca = Path(self._client_ca_file).read_bytes()
+            credentials = grpc.ssl_server_credentials(
+                ((key, cert),),
+                root_certificates=client_ca,
+                require_client_auth=True,
+            )
+            self._bound_port = server.add_secure_port(address, credentials)
+        else:
+            self._bound_port = server.add_insecure_port(address)
         await server.start()
         self._server = server
         log.info("agent_grpc_started", host=self._host, port=self._bound_port)

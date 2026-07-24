@@ -28,7 +28,7 @@ async def app_client():
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
         log_json=False,
-        jwt_secret="itest-secret-recent-deploy",
+        jwt_secret="itest-secret-recent-deploy-at-least-32-bytes",
         secret_backend="local",
         secret_master_key="",
         rate_limit_enabled=False,
@@ -88,9 +88,7 @@ async def _seed(app):
 
 
 async def _token(client) -> str:
-    resp = await client.post(
-        "/api/auth/login", json={"username": "operator", "password": "op-pw"}
-    )
+    resp = await client.post("/api/auth/login", json={"username": "operator", "password": "op-pw"})
     return resp.json()["data"]["access_token"]
 
 
@@ -98,9 +96,7 @@ async def test_recent_aggregates_across_services(app_client):
     client, app = app_client
     await _seed(app)
     token = await _token(client)
-    resp = await client.get(
-        "/api/deployments", headers={"Authorization": f"Bearer {token}"}
-    )
+    resp = await client.get("/api/deployments", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
     rows = resp.json()["data"]
     assert len(rows) == 2  # 跨两个服务

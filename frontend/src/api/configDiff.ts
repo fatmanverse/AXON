@@ -76,9 +76,7 @@ function splitLines(text: string): string[] {
 function lcsTable(a: string[], b: string[]): number[][] {
   const rows = a.length + 1;
   const cols = b.length + 1;
-  const table: number[][] = Array.from({ length: rows }, () =>
-    new Array<number>(cols).fill(0),
-  );
+  const table: number[][] = Array.from({ length: rows }, () => new Array<number>(cols).fill(0));
   for (let i = 1; i < rows; i += 1) {
     for (let j = 1; j < cols; j += 1) {
       if (a[i - 1] === b[j - 1]) {

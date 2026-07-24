@@ -59,6 +59,16 @@ def test_bootstrap_script_quotes_download_url():
     assert "rm -rf /;" not in script.replace(url, "")  # 原始注入片段不裸露为可执行命令
 
 
+def test_bootstrap_script_passes_explicit_agent_transport_args():
+    script = _bootstrap_script(
+        download_url="http://cp/agent",
+        version="1.0.0",
+        exec_args=("--agent-id", "node-1", "--insecure"),
+    )
+
+    assert "ExecStart=/usr/local/bin/axon-agent --agent-id node-1 --insecure" in script
+
+
 async def test_ensure_installed_runs_script_and_succeeds():
     executor = _FakeExecutor(CommandResult(exit_code=0, stdout="done", stderr=""))
     installer = AgentInstaller(executor)

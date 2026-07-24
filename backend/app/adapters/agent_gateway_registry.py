@@ -19,9 +19,18 @@ from app.services.agent_connection import AgentConnectionManager
 class AgentGatewayRegistry:
     """按 agent_id 复用 AgentGateway,避免每次动作重复注册 manager 回调。"""
 
-    def __init__(self, manager: AgentConnectionManager, *, ack_timeout: float = 30.0) -> None:
+    def __init__(
+        self,
+        manager: AgentConnectionManager,
+        *,
+        ack_timeout: float = 30.0,
+        artifact_chunk_bytes: int = 192 * 1024,
+        artifact_max_bytes: int = 1024 * 1024 * 1024,
+    ) -> None:
         self._manager = manager
         self._ack_timeout = ack_timeout
+        self._artifact_chunk_bytes = artifact_chunk_bytes
+        self._artifact_max_bytes = artifact_max_bytes
         self._gateways: dict[str, AgentGateway] = {}
 
     def for_agent(self, agent_id: str) -> AgentGateway:
@@ -32,6 +41,8 @@ class AgentGatewayRegistry:
                 manager=self._manager,
                 agent_id=agent_id,
                 ack_timeout=self._ack_timeout,
+                artifact_chunk_bytes=self._artifact_chunk_bytes,
+                artifact_max_bytes=self._artifact_max_bytes,
             )
             self._gateways[agent_id] = gateway
         return gateway

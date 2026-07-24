@@ -97,11 +97,13 @@ export function MonitoringPage(): React.ReactElement {
     const end = Math.floor(Date.now() / 1000);
     const rangeSpec = RANGE_OPTIONS.find((r) => r.value === range) ?? RANGE_OPTIONS[1];
     const startMs = (end - rangeSpec.seconds) * 1000;
-    return (markerDeployments ?? [])
-      .filter((d) => d.started_at)
-      .map((d) => ({ t: new Date(d.started_at as string).getTime(), label: d.version ?? "部署" }))
-      // 只保留落在当前时间窗内的标注,避免窗外竖线挤在边缘
-      .filter((m) => m.t >= startMs && m.t <= end * 1000);
+    return (
+      (markerDeployments ?? [])
+        .filter((d) => d.started_at)
+        .map((d) => ({ t: new Date(d.started_at as string).getTime(), label: d.version ?? "部署" }))
+        // 只保留落在当前时间窗内的标注,避免窗外竖线挤在边缘
+        .filter((m) => m.t >= startMs && m.t <= end * 1000)
+    );
   }, [markerDeployments, range]);
 
   const selected = useMemo(
@@ -134,9 +136,7 @@ export function MonitoringPage(): React.ReactElement {
     return (
       <Result
         status="warning"
-        subTitle={
-          serversError instanceof ApiError ? serversError.message : "加载服务器列表失败"
-        }
+        subTitle={serversError instanceof ApiError ? serversError.message : "加载服务器列表失败"}
       />
     );
   }
@@ -204,11 +204,7 @@ export function MonitoringPage(): React.ReactElement {
                   markers={markers}
                   loading={q.isLoading}
                   error={
-                    q.error instanceof ApiError
-                      ? q.error.message
-                      : q.error
-                        ? "指标查询失败"
-                        : null
+                    q.error instanceof ApiError ? q.error.message : q.error ? "指标查询失败" : null
                   }
                 />
               </Card>

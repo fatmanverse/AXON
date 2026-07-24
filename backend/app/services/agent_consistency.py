@@ -61,9 +61,7 @@ def resolve_timeout_status() -> TaskStatus:
     return TaskStatus.UNKNOWN
 
 
-def decide_offline_command(
-    *, env: str, action: str, agent_online: bool
-) -> OfflineCommandDecision:
+def decide_offline_command(*, env: str, action: str, agent_online: bool) -> OfflineCommandDecision:
     """Agent 离线时对命令的处置分档(§5.4 ⑤)。
 
     在线一律正常下发;离线时按环境与危险度分档:prod 高危(deploy/delete/rollback)
@@ -87,9 +85,7 @@ def fence_allows(*, current_fence: int, command_fence: int) -> bool:
     return command_fence >= current_fence
 
 
-def next_backoff_seconds(
-    *, attempt: int, base: float, cap: float, jitter: float = 0.2
-) -> float:
+def next_backoff_seconds(*, attempt: int, base: float, cap: float, jitter: float = 0.2) -> float:
     """重连退避间隔(§5.4 ⑦):指数退避 + jitter,封顶在 cap。
 
     控制面重启时几百个 Agent 同时重连会打爆,故 Agent 重连必须指数退避

@@ -1,0 +1,24 @@
+[Unit]
+Description=Axon Celery Beat
+After=network-online.target axon-migrate.service
+Wants=network-online.target
+Requires=axon-migrate.service
+
+[Service]
+Type=exec
+User=axon
+Group=axon
+WorkingDirectory=/opt/axon/backend
+EnvironmentFile=/etc/axon/axon.env
+ExecStart=/opt/axon/backend/.venv/bin/celery -A app.workers.celery_app beat --loglevel=info --schedule=/var/lib/axon/celerybeat-schedule
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/axon /var/log/axon
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

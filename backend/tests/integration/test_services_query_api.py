@@ -27,7 +27,7 @@ async def app_client(tmp_path):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
         log_json=False,
-        jwt_secret="itest-secret-services-query",
+        jwt_secret="itest-secret-services-query-at-least-32-bytes",
         secret_backend="local",
         secret_master_key="",
         rate_limit_enabled=False,
@@ -55,9 +55,7 @@ async def app_client(tmp_path):
 
 
 async def _token(client, username, password):
-    resp = await client.post(
-        "/api/auth/login", json={"username": username, "password": password}
-    )
+    resp = await client.post("/api/auth/login", json={"username": username, "password": password})
     return resp.json()["data"]["access_token"]
 
 
@@ -78,9 +76,7 @@ async def test_create_service_returns_view(app_client):
     client, _, _ = app_client
     token = await _token(client, "operator", "op-pw")
 
-    resp = await client.post(
-        "/api/services", headers=_auth(token), json=_service_body()
-    )
+    resp = await client.post("/api/services", headers=_auth(token), json=_service_body())
 
     assert resp.status_code == 201
     data = resp.json()["data"]
@@ -120,14 +116,10 @@ async def test_list_services_filters_by_env_and_runtime(app_client):
         json=_service_body("dev-docker", env="dev", runtime="docker"),
     )
 
-    resp = await client.get(
-        "/api/services", headers=_auth(token), params={"env": "prod"}
-    )
+    resp = await client.get("/api/services", headers=_auth(token), params={"env": "prod"})
     assert {s["name"] for s in resp.json()["data"]} == {"prod-sysd"}
 
-    resp = await client.get(
-        "/api/services", headers=_auth(token), params={"runtime": "docker"}
-    )
+    resp = await client.get("/api/services", headers=_auth(token), params={"runtime": "docker"})
     assert {s["name"] for s in resp.json()["data"]} == {"dev-docker"}
 
 
@@ -135,9 +127,7 @@ async def test_developer_forbidden_to_create_prod_service(app_client):
     client, _, _ = app_client
     token = await _token(client, "dev", "dev-pw")
 
-    resp = await client.post(
-        "/api/services", headers=_auth(token), json=_service_body(env="prod")
-    )
+    resp = await client.post("/api/services", headers=_auth(token), json=_service_body(env="prod"))
     assert resp.status_code == 403
 
 

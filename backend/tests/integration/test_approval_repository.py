@@ -54,8 +54,11 @@ async def test_approve_sets_decision_and_task(db):
     async with db.session() as session:
         repo = ApprovalRepository(session)
         approval = await repo.create(
-            service_id="s1", env="prod", action=ApprovalAction.DEPLOY,
-            payload={}, requested_by="alice",
+            service_id="s1",
+            env="prod",
+            action=ApprovalAction.DEPLOY,
+            payload={},
+            requested_by="alice",
         )
         approval_id = approval.id
     async with db.session() as session:
@@ -71,8 +74,11 @@ async def test_reject_sets_reason(db):
     async with db.session() as session:
         repo = ApprovalRepository(session)
         approval = await repo.create(
-            service_id="s1", env="prod", action=ApprovalAction.DELETE,
-            payload={}, requested_by="alice",
+            service_id="s1",
+            env="prod",
+            action=ApprovalAction.DELETE,
+            payload={},
+            requested_by="alice",
         )
         approval_id = approval.id
     async with db.session() as session:
@@ -86,8 +92,11 @@ async def test_cannot_decide_twice(db):
     async with db.session() as session:
         repo = ApprovalRepository(session)
         approval = await repo.create(
-            service_id="s1", env="prod", action=ApprovalAction.DEPLOY,
-            payload={}, requested_by="alice",
+            service_id="s1",
+            env="prod",
+            action=ApprovalAction.DEPLOY,
+            payload={},
+            requested_by="alice",
         )
         approval_id = approval.id
     async with db.session() as session:
@@ -102,12 +111,18 @@ async def test_list_pending_filters_by_env(db):
     async with db.session() as session:
         repo = ApprovalRepository(session)
         await repo.create(
-            service_id="s1", env="prod", action=ApprovalAction.DEPLOY,
-            payload={}, requested_by="a",
+            service_id="s1",
+            env="prod",
+            action=ApprovalAction.DEPLOY,
+            payload={},
+            requested_by="a",
         )
         await repo.create(
-            service_id="s2", env="staging", action=ApprovalAction.DEPLOY,
-            payload={}, requested_by="a",
+            service_id="s2",
+            env="staging",
+            action=ApprovalAction.DEPLOY,
+            payload={},
+            requested_by="a",
         )
         prod = await repo.list_pending(env="prod")
         assert len(prod) == 1

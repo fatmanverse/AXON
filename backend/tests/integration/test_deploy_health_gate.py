@@ -53,7 +53,7 @@ async def app_client():
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
         log_json=False,
-        jwt_secret="itest-secret-health-gate",
+        jwt_secret="itest-secret-health-gate-at-least-32-bytes",
         secret_backend="local",
         secret_master_key="",
         rate_limit_enabled=False,
@@ -90,18 +90,14 @@ async def _seed_service_with_health(app) -> str:
 
 
 async def _token(client) -> str:
-    resp = await client.post(
-        "/api/auth/login", json={"username": "operator", "password": "op-pw"}
-    )
+    resp = await client.post("/api/auth/login", json={"username": "operator", "password": "op-pw"})
     return resp.json()["data"]["access_token"]
 
 
 async def _latest_status(app, service_id) -> DeploymentStatus:
     db: Database = app.state.db
     async with db.session() as session:
-        deployments = await DeploymentRepository(session).list_for_service(
-            service_id, env="prod"
-        )
+        deployments = await DeploymentRepository(session).list_for_service(service_id, env="prod")
     return deployments[0].status
 
 

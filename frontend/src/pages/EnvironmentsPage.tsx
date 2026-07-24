@@ -99,11 +99,7 @@ export function EnvironmentsPage(): React.ReactElement {
       key: "requires_approval",
       width: 120,
       render: (req: boolean) =>
-        req ? (
-          <Tag color={colors.warning}>需审批</Tag>
-        ) : (
-          <Tag color="default">直接执行</Tag>
-        ),
+        req ? <Tag color={colors.warning}>需审批</Tag> : <Tag color="default">直接执行</Tag>,
     },
     { title: "描述", dataIndex: "description", key: "description" },
     {

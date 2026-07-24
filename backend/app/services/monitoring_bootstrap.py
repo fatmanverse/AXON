@@ -107,9 +107,7 @@ class MonitoringBootstrapService:
         log.info("monitoring_bootstrap_registered", server_id=server_id, target=target)
         return BootstrapResult(skipped=False, installed=True, target=target)
 
-    async def _install(
-        self, host: str, labels: dict[str, Any], credential_id: str | None
-    ) -> bool:
+    async def _install(self, host: str, labels: dict[str, Any], credential_id: str | None) -> bool:
         """经 SSH 装 node_exporter。失败返回 False(不抛,不登记目标)。"""
         ssh_target = SSHTarget(
             host=host,

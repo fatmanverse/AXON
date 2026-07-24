@@ -19,7 +19,9 @@ async def app_client():
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
         log_json=False,
-        jwt_secret="itest-secret",
+        jwt_secret="itest-secret-auth-at-least-32-bytes",
+        auth_max_failed_attempts=3,
+        auth_lockout_minutes=15,
     )
     app: FastAPI = create_app(settings)
 
@@ -71,6 +73,20 @@ async def test_login_bad_password_401(app_client):
 
 
 @pytest.mark.asyncio
+async def test_login_locks_account_after_repeated_failures(app_client):
+    client, _ = app_client
+
+    for _ in range(2):
+        assert (await _login(client, "admin", "nope")).status_code == 401
+    locked = await _login(client, "admin", "nope")
+    assert locked.status_code == 423
+    assert locked.json()["error"]["code"] == "account_locked"
+
+    correct_password = await _login(client, "admin", "admin-pw")
+    assert correct_password.status_code == 423
+
+
+@pytest.mark.asyncio
 async def test_unauthenticated_request_401(app_client):
     client, _ = app_client
     resp = await client.delete("/_probe/prod-delete")
@@ -91,3 +107,31 @@ async def test_developer_forbidden_prod_delete_403(app_client):
     token = (await _login(client, "dev", "dev-pw")).json()["data"]["access_token"]
     resp = await client.delete("/_probe/prod-delete", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_change_password_revokes_existing_token(app_client):
+    client, _ = app_client
+    token = (await _login(client, "dev", "dev-pw")).json()["data"]["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    changed = await client.post(
+        "/api/auth/change-password",
+        headers=headers,
+        json={"current_password": "dev-pw", "new_password": "new-dev-password"},
+    )
+    assert changed.status_code == 200
+    assert (await client.get("/api/auth/me", headers=headers)).status_code == 401
+    assert (await _login(client, "dev", "dev-pw")).status_code == 401
+    assert (await _login(client, "dev", "new-dev-password")).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_logout_revokes_current_token(app_client):
+    client, _ = app_client
+    token = (await _login(client, "dev", "dev-pw")).json()["data"]["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    logged_out = await client.post("/api/auth/logout", headers=headers)
+    assert logged_out.status_code == 200
+    assert (await client.get("/api/auth/me", headers=headers)).status_code == 401

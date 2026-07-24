@@ -215,6 +215,31 @@ async def test_k8s_canary_still_needs_argo():
     assert exc.value.status_code == 501
 
 
+async def test_k8s_canary_uses_argo_provider_when_configured():
+    class FakeArgo:
+        def __init__(self):
+            self.calls = []
+
+        async def promote(self, namespace, workload):
+            self.calls.append((namespace, workload))
+
+        async def abort(self, namespace, workload):
+            pass
+
+    argo = FakeArgo()
+    ctx = RolloutContext(
+        runtime=Runtime.K8S,
+        k8s_adapter=FakeK8s(),
+        namespace="prod",
+        workload="billing",
+        argo_provider=argo,
+    )
+
+    await execute_release_strategy(DeploymentStrategy.CANARY, ctx)
+
+    assert argo.calls == [("prod", "billing")]
+
+
 async def test_k8s_rolling_requires_adapter():
     ctx = RolloutContext(runtime=Runtime.K8S, namespace="p", workload="w", replicas=1)
     with pytest.raises(AppError) as exc:

@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     jwt_secret: str = "CHANGE-ME-in-prod"
     jwt_algorithm: str = "HS256"
     jwt_expires_minutes: int = 480
+    auth_max_failed_attempts: int = 5
+    auth_lockout_minutes: int = 15
 
     # 凭证保险箱(§13):local(Fernet)| vault
     secret_backend: Literal["local", "vault"] = "local"
@@ -46,13 +48,18 @@ class Settings(BaseSettings):
     vault_addr: str = ""
     vault_token: str = ""
 
+    # 首次 seed 管理员。生产必须通过外部 secret 注入,禁止使用开发默认值。
+    seed_admin_user: str = "admin"
+    seed_admin_password: str = "admin"
+
     # 任务队列(Celery + Redis)
     redis_url: str = "redis://localhost:6379/0"
     celery_broker_url: str = ""
     celery_result_backend: str = ""
     celery_task_always_eager: bool = False
 
-    # 网关限流(T0.12):MVP 用进程内令牌桶,后续可换 Redis 分布式实现
+    # 网关限流(T0.12):开发/测试可用进程内桶,生产必须 Redis 分布式实现
+    coordination_backend: Literal["memory", "redis"] = "memory"
     rate_limit_enabled: bool = True
     rate_limit_capacity: int = 120  # 桶容量(突发上限)
     rate_limit_refill_per_sec: float = 20.0  # 每秒补充速率(稳态 QPS)
@@ -69,6 +76,7 @@ class Settings(BaseSettings):
     # 部署轮询兜底(T2.7,§8.2/§8.3④):定时补齐仍卡 running 的部署(webhook 丢失时),
     # 与 webhook 靠状态机去重。间隔(秒);0 或负数关闭。
     deploy_reconcile_interval_sec: float = 60.0
+    deploy_reconcile_lease_ttl_sec: float = 180.0
 
     # 监控自举(T1.13):node_exporter 版本/端口 + Prometheus file_sd 目标文件路径
     node_exporter_version: str = "1.8.2"
@@ -124,12 +132,38 @@ class Settings(BaseSettings):
     k8s_in_cluster: bool = False  # True:用 Pod 内 ServiceAccount(控制面自身跑在集群里)
     k8s_kubeconfig: str = ""  # 非 in-cluster 时的 kubeconfig 路径;空则用默认查找路径
     k8s_default_replicas: int = 1  # start/scale 回的默认副本数(§14.2 副本不落库)
+    argo_rollouts_enabled: bool = False
+    argo_rollouts_group: str = "argoproj.io"
+    argo_rollouts_version: str = "v1alpha1"
+    argo_rollouts_plural: str = "rollouts"
+    argo_rollouts_health_timeout_sec: float = 300.0
+    load_balancer_config: dict[str, str] = {}
 
     # Agent gRPC server(T4.1,§15.5):Agent 主动外连的监听地址。enabled 关闭时
     # 不起 gRPC server(纯 SSH 部署,默认);开启后 Agent 可建双向流上报/收命令。
     agent_grpc_enabled: bool = False
     agent_grpc_host: str = "0.0.0.0"  # noqa: S104 - Agent 需从各内网机器外连,须监听全网卡
     agent_grpc_port: int = 50051
+    # Agent gRPC 传输安全。开发/测试可显式关闭 TLS 使用 insecure；生产启用
+    # Agent 时强制双向 TLS，并要求服务端证书、私钥和客户端 CA 文件。
+    agent_grpc_tls_enabled: bool = False
+    agent_grpc_server_cert_file: str = ""
+    agent_grpc_server_key_file: str = ""
+    agent_grpc_client_ca_file: str = ""
+    # 紧急吊销:证书身份与 agent_id 绑定后，命中列表即拒绝建流。
+    agent_grpc_revoked_agent_ids: list[str] = []
+    # Agent 自举连接参数。证书路径是目标机上的路径，证书内容应由企业配置
+    # 管理/secret volume 预置，不由控制面在安装脚本中回显。
+    agent_grpc_server_address: str = ""
+    agent_grpc_client_ca_path: str = "/etc/axon/tls/ca.crt"
+    agent_grpc_client_cert_path: str = "/etc/axon/tls/agent.crt"
+    agent_grpc_client_key_path: str = "/etc/axon/tls/agent.key"
+    agent_grpc_client_server_name: str = ""
+    agent_insecure_install: bool = False
+    agent_config_roots: list[str] = ["/etc/axon"]
+    agent_artifact_staging_dir: str = "/tmp/axon-artifacts"
+    agent_artifact_chunk_bytes: int = 192 * 1024
+    agent_artifact_max_bytes: int = 1024 * 1024 * 1024
     # 心跳超时窗(秒):超过未收到心跳判 agent 离线,触发 §5.4 离线分档与 fencing。
     agent_heartbeat_timeout_sec: float = 30.0
 
@@ -153,6 +187,7 @@ class Settings(BaseSettings):
     build_workspace_dir: str = "/var/lib/axon/builds"
     build_artifacts_dir: str = "/var/lib/axon/artifacts"
     build_step_timeout_sec: float = 1800.0
+    build_node_lease_ttl_sec: float = 7200.0
 
     @property
     def broker_url(self) -> str:
@@ -161,6 +196,63 @@ class Settings(BaseSettings):
     @property
     def result_backend(self) -> str:
         return self.celery_result_backend or self.redis_url
+
+    def validate_for_runtime(self) -> None:
+        """Reject unsafe production defaults before any runtime side effect."""
+        if self.env != "prod":
+            return
+
+        errors: list[str] = []
+        if len(self.jwt_secret) < 32 or self.jwt_secret in {
+            "CHANGE-ME-in-prod",
+            "CHANGE-ME-32-bytes-min-in-production",
+            "change-me-in-prod-please-32bytes-min",
+        }:
+            errors.append("jwt_secret must be a unique value of at least 32 bytes")
+        if self.database_url == "postgresql+asyncpg://yimai:yimai@localhost:5432/yimai":
+            errors.append("database_url must not use the development default")
+        if self.redis_url == "redis://localhost:6379/0":
+            errors.append("redis_url must not use the development default")
+        if self.coordination_backend != "redis":
+            errors.append("coordination_backend must be redis in production")
+        if self.argo_rollouts_enabled and not self.k8s_enabled:
+            errors.append("k8s_enabled must be true when argo_rollouts_enabled")
+        if self.load_balancer_config:
+            if self.load_balancer_config.get("provider") != "http":
+                errors.append("load_balancer_config.provider must be http")
+            base_url = self.load_balancer_config.get("base_url", "")
+            if not base_url.startswith("https://"):
+                errors.append("load_balancer_config.base_url must use https in production")
+            if not self.load_balancer_config.get("token_credential_id"):
+                errors.append("load_balancer_config.token_credential_id is required")
+        if not self.cors_origins or all("localhost" in origin for origin in self.cors_origins):
+            errors.append("cors_origins must contain a production origin")
+        if self.secret_backend != "vault":
+            errors.append("secret_backend must be vault in production")
+        elif not self.vault_addr or not self.vault_token:
+            errors.append("vault_addr and vault_token are required for production")
+        if self.seed_admin_user == "admin" or self.seed_admin_password in {"admin", ""}:
+            errors.append("seed_admin_user and seed_admin_password must not use defaults")
+        if len(self.seed_admin_password) < 12:
+            errors.append("seed_admin_password must be at least 12 characters")
+        if not self.webhook_secrets:
+            errors.append("webhook_secrets must contain at least one source")
+        if self.agent_grpc_enabled:
+            if not self.agent_grpc_tls_enabled:
+                errors.append("agent_grpc_tls_enabled must be true in production")
+            for field, value in (
+                ("agent_grpc_server_cert_file", self.agent_grpc_server_cert_file),
+                ("agent_grpc_server_key_file", self.agent_grpc_server_key_file),
+                ("agent_grpc_client_ca_file", self.agent_grpc_client_ca_file),
+            ):
+                if not value:
+                    errors.append(f"{field} is required when Agent mTLS is enabled")
+            if not self.agent_grpc_server_address:
+                errors.append("agent_grpc_server_address is required when Agent is enabled")
+            if self.agent_insecure_install:
+                errors.append("agent_insecure_install must be false in production")
+        if errors:
+            raise ValueError("unsafe production configuration: " + "; ".join(errors))
 
 
 @lru_cache

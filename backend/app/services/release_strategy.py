@@ -54,6 +54,12 @@ class LoadBalancerLike(Protocol):
     async def switch_upstream(self, target: str, upstream: str) -> None: ...
 
 
+class ArgoRolloutsLike(Protocol):
+    async def promote(self, namespace: str, workload: str) -> None: ...
+
+    async def abort(self, namespace: str, workload: str) -> None: ...
+
+
 @dataclass(frozen=True)
 class BareMetalTarget:
     """一个裸机放置点:绑定其运行时适配器与动作目标(unit/container 名)。"""
@@ -81,6 +87,7 @@ class RolloutContext:
     upstream_ref: str = ""  # LB 上游标识(蓝绿切换/canary 权重的作用目标)
     new_upstream: str = ""  # 蓝绿:新版所在上游组名
     canary_steps: tuple[int, ...] = (10, 50, 100)  # canary 权重放量阶梯
+    argo_provider: ArgoRolloutsLike | None = None
 
 
 def _needs_argo(strategy: DeploymentStrategy) -> AppError:
@@ -92,9 +99,7 @@ def _needs_argo(strategy: DeploymentStrategy) -> AppError:
     )
 
 
-async def execute_release_strategy(
-    strategy: DeploymentStrategy, ctx: RolloutContext
-) -> None:
+async def execute_release_strategy(strategy: DeploymentStrategy, ctx: RolloutContext) -> None:
     """按 (runtime, strategy) 执行发布铺开。不支持的组合抛 AppError(501/409)。"""
     if ctx.runtime == Runtime.K8S:
         await _execute_k8s(strategy, ctx)
@@ -117,6 +122,8 @@ async def _execute_k8s(strategy: DeploymentStrategy, ctx: RolloutContext) -> Non
         # 停旧起新:scale 到 0 再拉回目标副本(对应 k8s Recreate 语义)
         await ctx.k8s_adapter.scale(ctx.namespace, ctx.workload, 0)
         await ctx.k8s_adapter.scale(ctx.namespace, ctx.workload, ctx.replicas)
+    elif ctx.argo_provider is not None:
+        await ctx.argo_provider.promote(ctx.namespace, ctx.workload)
     else:
         raise _needs_argo(strategy)
 

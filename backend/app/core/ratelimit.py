@@ -8,6 +8,13 @@ MVP 用进程内令牌桶,按客户端 key(默认取来源 IP)隔离。
 import threading
 import time
 from collections.abc import Callable
+from typing import Any
+
+from redis.exceptions import RedisError
+
+
+class RateLimitUnavailable(RuntimeError):
+    """分布式限流状态不可用；调用方必须显式失败，不能退回进程内桶。"""
 
 
 class TokenBucket:
@@ -70,3 +77,66 @@ class RateLimiter:
                 bucket = TokenBucket(self._capacity, self._refill, self._now)
                 self._buckets[key] = bucket
             return bucket.take(cost)
+
+
+class RedisRateLimiter:
+    """基于 Redis Lua 原子令牌桶，供多副本 API 共享限流状态。"""
+
+    _SCRIPT = """
+local key = KEYS[1]
+local capacity = tonumber(ARGV[1])
+local refill = tonumber(ARGV[2])
+local cost = tonumber(ARGV[3])
+local ttl = tonumber(ARGV[4])
+local now_parts = redis.call('TIME')
+local now = tonumber(now_parts[1]) + tonumber(now_parts[2]) / 1000000
+local values = redis.call('HMGET', key, 'tokens', 'last')
+local tokens = tonumber(values[1])
+local last = tonumber(values[2])
+if tokens == nil then
+  tokens = capacity
+  last = now
+else
+  tokens = math.min(capacity, tokens + math.max(0, now - last) * refill)
+end
+local allowed = 0
+if tokens >= cost then
+  tokens = tokens - cost
+  allowed = 1
+end
+redis.call('HSET', key, 'tokens', tokens, 'last', now)
+redis.call('PEXPIRE', key, ttl)
+return allowed
+"""
+
+    def __init__(
+        self,
+        redis: Any,
+        capacity: int,
+        refill_per_sec: float,
+        *,
+        namespace: str = "axon:ratelimit",
+    ) -> None:
+        if capacity <= 0 or refill_per_sec < 0:
+            raise ValueError("Redis 限流 capacity 必须为正，refill_per_sec 不能为负")
+        self._redis = redis
+        self._capacity = capacity
+        self._refill = refill_per_sec
+        self._namespace = namespace.rstrip(":")
+        refill_window = capacity / refill_per_sec if refill_per_sec > 0 else 3600
+        self._ttl_ms = max(60_000, int(refill_window * 2 * 1000))
+
+    async def allow(self, key: str, cost: float = 1.0) -> bool:
+        try:
+            result = await self._redis.eval(
+                self._SCRIPT,
+                1,
+                f"{self._namespace}:{key}",
+                str(self._capacity),
+                str(self._refill),
+                str(cost),
+                str(self._ttl_ms),
+            )
+        except RedisError as exc:
+            raise RateLimitUnavailable("Redis 限流状态不可用") from exc
+        return bool(int(result))

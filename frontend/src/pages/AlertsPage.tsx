@@ -72,8 +72,7 @@ export function AlertsPage(): React.ReactElement {
       dataIndex: "fired_at",
       key: "fired_at",
       width: 180,
-      render: (t: string | null) =>
-        t ? new Date(t).toLocaleString("zh-CN") : <Muted />,
+      render: (t: string | null) => (t ? new Date(t).toLocaleString("zh-CN") : <Muted />),
     },
   ];
 

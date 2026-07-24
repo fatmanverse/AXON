@@ -46,9 +46,7 @@ def test_tampered_body_rejected():
     ts = int(time.time())
     sig = _sign(_SECRET, ts, _BODY)
     with pytest.raises(SignatureError):
-        verify_signature(
-            body=_BODY + b"x", timestamp=ts, signature=sig, secrets=[_SECRET]
-        )
+        verify_signature(body=_BODY + b"x", timestamp=ts, signature=sig, secrets=[_SECRET])
 
 
 def test_wrong_secret_rejected():
@@ -62,18 +60,14 @@ def test_replay_outside_window_rejected():
     old = int(time.time()) - 600  # 10 分钟前,超出默认 ±300s 窗
     sig = _sign(_SECRET, old, _BODY)
     with pytest.raises(SignatureError, match="时间窗"):
-        verify_signature(
-            body=_BODY, timestamp=old, signature=sig, secrets=[_SECRET], window=300
-        )
+        verify_signature(body=_BODY, timestamp=old, signature=sig, secrets=[_SECRET], window=300)
 
 
 def test_future_timestamp_outside_window_rejected():
     future = int(time.time()) + 600
     sig = _sign(_SECRET, future, _BODY)
     with pytest.raises(SignatureError, match="时间窗"):
-        verify_signature(
-            body=_BODY, timestamp=future, signature=sig, secrets=[_SECRET], window=300
-        )
+        verify_signature(body=_BODY, timestamp=future, signature=sig, secrets=[_SECRET], window=300)
 
 
 def test_dual_secret_rotation_either_passes():

@@ -31,9 +31,7 @@ def _uuid() -> str:
 class ScanResult(Base, TimestampMixin):
     __tablename__ = "scan_results"
     # 幂等键(§8.3):同一 (git_sha, scanner) 只留一条,重复上报幂等更新。
-    __table_args__ = (
-        UniqueConstraint("git_sha", "scanner", name="uq_scan_results_idempotency"),
-    )
+    __table_args__ = (UniqueConstraint("git_sha", "scanner", name="uq_scan_results_idempotency"),)
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     service: Mapped[str] = mapped_column(String(128), nullable=False, index=True)

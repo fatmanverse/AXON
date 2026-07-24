@@ -27,6 +27,7 @@ def verify_password(plaintext: str, hashed: str) -> bool:
 class TokenClaims:
     subject: str
     roles: list[str] = field(default_factory=list)
+    token_version: int = 0
 
 
 def create_access_token(
@@ -36,11 +37,13 @@ def create_access_token(
     roles: list[str],
     algorithm: str = "HS256",
     expires_minutes: int = 480,
+    token_version: int = 0,
 ) -> str:
     now = datetime.now(UTC)
     payload = {
         "sub": subject,
         "roles": roles,
+        "ver": token_version,
         "iat": now,
         "exp": now + timedelta(minutes=expires_minutes),
     }
@@ -49,4 +52,8 @@ def create_access_token(
 
 def decode_access_token(token: str, *, secret: str, algorithm: str = "HS256") -> TokenClaims:
     payload = jwt.decode(token, secret, algorithms=[algorithm])
-    return TokenClaims(subject=payload["sub"], roles=list(payload.get("roles", [])))
+    return TokenClaims(
+        subject=payload["sub"],
+        roles=list(payload.get("roles", [])),
+        token_version=int(payload.get("ver", 0)),
+    )

@@ -78,9 +78,7 @@ describe("ServersPage", () => {
     mock.onGet("/api/servers").reply(200, ok([]));
     renderPage();
 
-    expect(
-      await screen.findByText("暂无纳管服务器,点击右上角纳管第一台"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("暂无纳管服务器,点击右上角纳管第一台")).toBeInTheDocument();
   });
 
   it("加载失败显示错误态", async () => {
@@ -141,9 +139,7 @@ describe("ServersPage", () => {
     await user.click(screen.getByRole("button", { name: "连通性测试" }));
 
     await waitFor(() => {
-      expect(
-        mock.history.post.some((r) => r.url === "/api/servers/s1/test-connection"),
-      ).toBe(true);
+      expect(mock.history.post.some((r) => r.url === "/api/servers/s1/test-connection")).toBe(true);
     });
   });
 

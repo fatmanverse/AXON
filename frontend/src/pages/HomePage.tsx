@@ -96,9 +96,7 @@ function StatTile({
         {icon}
       </div>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 2 }}>
-          {label}
-        </div>
+        <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 2 }}>{label}</div>
         {loading ? (
           <Skeleton.Button active size="small" style={{ width: 60, height: 28 }} />
         ) : (

@@ -15,10 +15,15 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from redis import Redis
+
 from app.core.config import get_settings
 from app.core.db import Database
 from app.core.logging import get_logger
+from app.core.redis_lease import RedisLease
+from app.core.secrets import build_secret_store
 from app.services.deploy_reconciler import AdapterProvider, DeployReconciler
+from app.services.pipeline_provider import build_pipeline_provider
 from app.workers.celery_app import celery_app
 
 log = get_logger("deploy_tasks")
@@ -35,6 +40,14 @@ def set_provider_resolver(provider: AdapterProvider | None) -> None:
 
 
 async def _run_once() -> dict[str, Any]:
+    global _provider_resolver
+    if _provider_resolver is None:
+        settings = get_settings()
+        if settings.pipeline_config:
+            _provider_resolver = build_pipeline_provider(
+                settings.pipeline_config,
+                build_secret_store(settings),
+            )
     if _provider_resolver is None:
         log.info("deploy_reconcile_skipped", reason="no_pipeline_provider")
         return {"skipped": True, "reconciled": 0}
@@ -53,7 +66,23 @@ async def _run_once() -> dict[str, Any]:
 @celery_app.task(name="app.workers.deploy_tasks.reconcile_deployments")
 def reconcile_deployments() -> dict[str, Any]:
     """跑一轮部署补偿:查仍 running 的部署对应 pipeline 的当前状态,补齐终态。"""
-    return asyncio.run(_run_once())
+    settings = get_settings()
+    if settings.coordination_backend != "redis":
+        return asyncio.run(_run_once())
+
+    redis = Redis.from_url(settings.redis_url, decode_responses=True)
+    try:
+        with RedisLease(
+            redis,
+            "axon:lease:deploy-reconcile",
+            ttl_sec=settings.deploy_reconcile_lease_ttl_sec,
+        ) as acquired:
+            if not acquired:
+                log.info("deploy_reconcile_skipped", reason="lease_held")
+                return {"skipped": True, "reason": "lease_held", "reconciled": 0}
+            return asyncio.run(_run_once())
+    finally:
+        redis.close()
 
 
 def register_beat_schedule(sender: Any, **_: Any) -> None:

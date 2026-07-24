@@ -290,10 +290,18 @@ async def test_rollout_strategy_failure_marks_deploy_failed(db):
 
 class _FakeArtifactDeployer:
     """记录 deploy 调用；可配置失败。"""
-    def __init__(self, *, artifact_id: str, version: str = "v1.0.0",
-                 uri: str = "/tmp/app.tar.gz", fail: bool = False) -> None:
+
+    def __init__(
+        self,
+        *,
+        artifact_id: str,
+        version: str = "v1.0.0",
+        uri: str = "/tmp/app.tar.gz",
+        fail: bool = False,
+    ) -> None:
         from app.models.artifact import ArtifactRegistryType
         from app.services.artifact_deployment_service import ArtifactDeployInput
+
         self._input = ArtifactDeployInput(
             service_id="",  # filled in test
             artifact_id=artifact_id,
@@ -310,6 +318,7 @@ class _FakeArtifactDeployer:
         if self._fail:
             raise RuntimeError("runtime error")
         from dataclasses import replace
+
         return replace(self._input, service_id=service_id)
 
 
@@ -351,6 +360,7 @@ async def test_artifact_deploy_success_saves_artifact_id(db):
     # deployment 有 artifact_id
     async with db.session() as session:
         from app.services.deployment_repository import DeploymentRepository
+
         deps = await DeploymentRepository(session).list_for_service(service_id)
     assert len(deps) == 1
     assert deps[0].artifact_id == "a" * 32

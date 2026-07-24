@@ -180,8 +180,7 @@ export function ServersPage(): React.ReactElement {
       dataIndex: "environment",
       key: "environment",
       width: 100,
-      render: (env: string | null) =>
-        env ? <Tag>{env}</Tag> : <Muted />,
+      render: (env: string | null) => (env ? <Tag>{env}</Tag> : <Muted />),
     },
     {
       title: "接入模式",

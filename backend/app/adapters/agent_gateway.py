@@ -17,6 +17,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+from pathlib import Path
 
 from app.adapters.executor import CommandResult, DeploySpec, Executor, ServiceStatus
 from app.core.errors import AppError
@@ -25,6 +28,7 @@ from app.services.agent_connection import (
     AgentConnectionManager,
     AgentMessage,
     AgentMessageKind,
+    AgentRoutingError,
     ServerCommand,
 )
 
@@ -54,11 +58,17 @@ class AgentGateway(Executor):
         agent_id: str | None = None,
         ack_timeout: float = 30.0,
         fence: int = 0,
+        artifact_chunk_bytes: int = 192 * 1024,
+        artifact_max_bytes: int = 1024 * 1024 * 1024,
     ) -> None:
         self._manager = manager
         self._agent_id = agent_id
         self._ack_timeout = ack_timeout
         self._fence = fence
+        if artifact_chunk_bytes <= 0 or artifact_max_bytes <= 0:
+            raise ValueError("Agent 制品分块和大小上限必须为正数")
+        self._artifact_chunk_bytes = artifact_chunk_bytes
+        self._artifact_max_bytes = artifact_max_bytes
         # task_id → 等待 result ACK 的 future。收到 ACK 时 resolve。
         self._pending: dict[str, asyncio.Future[AgentMessage]] = {}
         if manager is not None:
@@ -78,9 +88,7 @@ class AgentGateway(Executor):
             raise AgentNotConnectedError()
 
         task_id = uuid_hex()
-        command = ServerCommand(
-            task_id=task_id, action=action, params=params, fence=self._fence
-        )
+        command = ServerCommand(task_id=task_id, action=action, params=params, fence=self._fence)
         future: asyncio.Future[AgentMessage] = asyncio.get_running_loop().create_future()
         self._pending[task_id] = future
         try:
@@ -92,6 +100,12 @@ class AgentGateway(Executor):
                 raise AppError(
                     "agent_offline",
                     f"Agent 无活跃连接,无法下发: {self._agent_id}",
+                    status_code=503,
+                ) from exc
+            except AgentRoutingError as exc:
+                raise AppError(
+                    "agent_routing_unavailable",
+                    "Agent 跨实例路由不可用,请稍后重试",
                     status_code=503,
                 ) from exc
 
@@ -123,6 +137,72 @@ class AgentGateway(Executor):
 
     async def update_config(self, path: str, content: str) -> CommandResult:
         return await self._dispatch("update_config", {"path": path, "content": content})
+
+    async def upload_artifact(self, local_path: str, remote_path: str) -> None:
+        """以 bounded chunks 上传制品，Agent commit 时再做长度和 SHA-256 校验。"""
+        path = Path(local_path)
+        if not path.is_file():
+            raise AppError(
+                "artifact_local_not_found",
+                f"本地制品文件不存在: {local_path}",
+                status_code=404,
+            )
+        size = path.stat().st_size
+        if size > self._artifact_max_bytes:
+            raise AppError(
+                "artifact_too_large",
+                f"制品超过 Agent 制品上限({self._artifact_max_bytes} bytes)",
+                status_code=413,
+            )
+
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            while chunk := handle.read(self._artifact_chunk_bytes):
+                digest.update(chunk)
+        transfer_id = uuid_hex()
+        await self._dispatch_checked(
+            "artifact_begin",
+            {
+                "transfer_id": transfer_id,
+                "remote_path": remote_path,
+                "size": str(size),
+                "sha256": digest.hexdigest(),
+            },
+        )
+        offset = 0
+        try:
+            with path.open("rb") as handle:
+                while chunk := handle.read(self._artifact_chunk_bytes):
+                    await self._dispatch_checked(
+                        "artifact_chunk",
+                        {
+                            "transfer_id": transfer_id,
+                            "offset": str(offset),
+                            "data": base64.b64encode(chunk).decode("ascii"),
+                            "chunk_sha256": hashlib.sha256(chunk).hexdigest(),
+                        },
+                    )
+                    offset += len(chunk)
+            await self._dispatch_checked("artifact_commit", {"transfer_id": transfer_id})
+        except Exception:
+            try:
+                await self._dispatch_checked("artifact_abort", {"transfer_id": transfer_id})
+            except Exception as cleanup_exc:  # noqa: BLE001 - 保留原始失败结论
+                log.warning(
+                    "agent_artifact_abort_failed",
+                    transfer_id=transfer_id,
+                    error_type=type(cleanup_exc).__name__,
+                )
+            raise
+
+    async def _dispatch_checked(self, action: str, params: dict[str, str]) -> None:
+        result = await self._dispatch(action, params)
+        if not result.succeeded:
+            raise AppError(
+                "agent_artifact_upload_failed",
+                f"Agent 制品动作失败:{action}: {result.stderr or result.stdout}",
+                status_code=502,
+            )
 
     async def get_service_status(self, service_ref: str) -> ServiceStatus:
         result = await self._dispatch("status", {"service_ref": service_ref})

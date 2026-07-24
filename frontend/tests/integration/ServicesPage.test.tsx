@@ -97,19 +97,20 @@ describe("ServicesPage", () => {
 
   it("重启动作落 task 并轮询回显成功", async () => {
     mock.onGet("/api/services").reply(200, ok([SVC]));
-    mock
-      .onPost("/api/services/svc1/restart")
-      .reply(202, ok({ task_id: "t1", status: "pending" }));
-    mock.onGet("/api/tasks/t1").reply(200, ok({
-      id: "t1",
-      type: "restart",
-      status: "success",
-      target: "service:svc1",
-      result: { action: "restart" },
-      error: null,
-      created_at: "2026-07-11T12:00:00Z",
-      finished_at: "2026-07-11T12:00:01Z",
-    }));
+    mock.onPost("/api/services/svc1/restart").reply(202, ok({ task_id: "t1", status: "pending" }));
+    mock.onGet("/api/tasks/t1").reply(
+      200,
+      ok({
+        id: "t1",
+        type: "restart",
+        status: "success",
+        target: "service:svc1",
+        result: { action: "restart" },
+        error: null,
+        created_at: "2026-07-11T12:00:00Z",
+        finished_at: "2026-07-11T12:00:01Z",
+      }),
+    );
 
     const user = userEvent.setup();
     renderPage();
@@ -118,9 +119,7 @@ describe("ServicesPage", () => {
     await user.click(screen.getByRole("button", { name: byName("重启") }));
 
     await waitFor(() => {
-      expect(mock.history.post.some((r) => r.url === "/api/services/svc1/restart")).toBe(
-        true,
-      );
+      expect(mock.history.post.some((r) => r.url === "/api/services/svc1/restart")).toBe(true);
     });
     expect(await screen.findByText(/重启成功/)).toBeInTheDocument();
   });
@@ -128,16 +127,19 @@ describe("ServicesPage", () => {
   it("删除走二次确认后落 task", async () => {
     mock.onGet("/api/services").reply(200, ok([SVC]));
     mock.onDelete("/api/services/svc1").reply(202, ok({ task_id: "t2", status: "pending" }));
-    mock.onGet("/api/tasks/t2").reply(200, ok({
-      id: "t2",
-      type: "delete",
-      status: "success",
-      target: "service:svc1",
-      result: { action: "delete" },
-      error: null,
-      created_at: "2026-07-11T12:00:00Z",
-      finished_at: "2026-07-11T12:00:01Z",
-    }));
+    mock.onGet("/api/tasks/t2").reply(
+      200,
+      ok({
+        id: "t2",
+        type: "delete",
+        status: "success",
+        target: "service:svc1",
+        result: { action: "delete" },
+        error: null,
+        created_at: "2026-07-11T12:00:00Z",
+        finished_at: "2026-07-11T12:00:01Z",
+      }),
+    );
 
     const user = userEvent.setup();
     renderPage();

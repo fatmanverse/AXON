@@ -72,7 +72,10 @@ export interface TriggerBuildBody {
   version?: string;
 }
 
-export function triggerBuild(serviceId: string, body: TriggerBuildBody = {}): Promise<TaskAccepted> {
+export function triggerBuild(
+  serviceId: string,
+  body: TriggerBuildBody = {},
+): Promise<TaskAccepted> {
   return api.post<TaskAccepted>(`/api/services/${serviceId}/build`, body);
 }
 

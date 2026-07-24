@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-07-23-production-platform-readiness",
+  "lastCheckpointRef": "docs/aegis/work/2026-07-23-production-platform-readiness/todo-checkpoint-draft.json",
+  "resumeInstruction": "先读取本 checkpoint 与 final evidence，再执行外部 smoke，不把 skipped 当 green",
+  "knownPartialWork": [
+    "OpenAPI/schema 再生与前端 BuildsPage 制品部署入口",
+    "Redis Agent owner 跨 API 副本路由与 stale heartbeat fencing",
+    "Kubernetes/Compose/systemd 生产 packaging",
+    "后端/前端全量测试、静态检查、构建、迁移往返"
+  ],
+  "mustReadBeforeContinuing": [
+    "docs/aegis/work/2026-07-23-production-platform-readiness/10-intent.md",
+    "docs/aegis/work/2026-07-23-production-platform-readiness/20-checkpoint.md",
+    "docs/aegis/work/2026-07-23-production-platform-readiness/todo-checkpoint-draft.json"
+  ],
+  "unsafeToAssume": [
+    "本地单测和静态解析不等于真实 provider/网络/证书/持久化可用"
+  ]
+}

@@ -26,6 +26,7 @@ log = get_logger("k8s_client")
 
 # 工厂类型:无参构造一个 AppsV1ApiLike(每次动作现取,复用启动时加载的全局连接配置)。
 K8sApiFactory = Callable[[], AppsV1ApiLike]
+K8sCustomObjectsApiFactory = Callable[[], object]
 
 
 async def build_k8s_api_factory(settings: Settings) -> K8sApiFactory | None:
@@ -56,5 +57,19 @@ async def build_k8s_api_factory(settings: Settings) -> K8sApiFactory | None:
         # 每次动作新建 AppsV1Api(复用已加载的全局连接配置);AppsV1Api 满足
         # AppsV1ApiLike Protocol(read/patch/scale/delete 方法签名一致)。
         return client.AppsV1Api(client.ApiClient())
+
+    return _factory
+
+
+def build_k8s_custom_objects_api_factory(
+    settings: Settings,
+) -> K8sCustomObjectsApiFactory | None:
+    """在连接配置已加载后构造 Argo Rollouts 所需 CustomObjectsApi 工厂。"""
+    if not settings.k8s_enabled or not settings.argo_rollouts_enabled:
+        return None
+    from kubernetes_asyncio import client
+
+    def _factory() -> object:
+        return client.CustomObjectsApi(client.ApiClient())
 
     return _factory

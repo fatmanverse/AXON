@@ -122,9 +122,9 @@ describe("ConfigsPage", () => {
     await user.click(confirm);
 
     await waitFor(() => {
-      expect(
-        mock.history.post.some((r) => r.url === "/api/services/svc1/configs/1/activate"),
-      ).toBe(true);
+      expect(mock.history.post.some((r) => r.url === "/api/services/svc1/configs/1/activate")).toBe(
+        true,
+      );
     });
   });
 

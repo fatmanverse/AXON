@@ -12,13 +12,15 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.adapters.artifact_transfer import SshArtifactTransfer
+from app.adapters.artifact_transfer import AgentArtifactTransfer, SshArtifactTransfer
 from app.adapters.ssh_executor import SSHTarget
 from app.core.errors import AppError
+from app.models.server import AccessMode, Server
+from app.services.executor_factory import build_artifact_transfer_for_server
 
 # ── fake connector helpers ─────────────────────────────────────────────────
 
@@ -204,3 +206,37 @@ async def test_upload_password_auth_passes_password(tmp_path: Path):
     assert "password" in captured
     assert captured["password"] == "secret123"
     assert "client_key" not in captured
+
+
+async def test_agent_transfer_delegates_to_reused_gateway(tmp_path: Path):
+    local = tmp_path / "app.tar.gz"
+    local.write_bytes(b"data")
+    gateway = MagicMock()
+    gateway.upload_artifact = AsyncMock()
+
+    transfer = AgentArtifactTransfer(gateway)
+    await transfer.upload(str(local), "/tmp/axon-artifacts/app.tar.gz")
+
+    gateway.upload_artifact.assert_awaited_once_with(str(local), "/tmp/axon-artifacts/app.tar.gz")
+
+
+def test_factory_builds_agent_transfer_from_registry():
+    server = Server(
+        name="edge-1",
+        host="10.0.0.9",
+        access_mode=AccessMode.AGENT,
+        agent_id="agent-edge-1",
+        labels={},
+    )
+    gateway = MagicMock()
+    registry = MagicMock()
+    registry.for_agent.return_value = gateway
+
+    transfer = build_artifact_transfer_for_server(
+        server,
+        MagicMock(),
+        agent_registry=registry,
+    )
+
+    assert isinstance(transfer, AgentArtifactTransfer)
+    registry.for_agent.assert_called_once_with("agent-edge-1")

@@ -5,7 +5,7 @@
  *   - layout="vertical" + requiredMark={false}:与全站表单排版一致
  *   - onOk 触发 form.submit(),交由父页 Form 的 onFinish 落业务(mutation)
  *   - confirmLoading 由父页的提交态驱动(mutation.isPending)
- *   - destroyOnClose:关闭即卸载,避免残留脏态
+ *   - destroyOnHidden:关闭即卸载,避免残留脏态
  *   - 取消时 resetFields:主动清空,与父页 onSuccess 的 resetFields 对称
  *
  * 设计取舍:不接管 form 生命周期(由父页 Form.useForm 持有),本组件只做壳与联动;
@@ -69,7 +69,7 @@ export function FormModal<Values extends object>({
       okText={okText}
       cancelText={cancelText}
       width={width}
-      destroyOnClose
+      destroyOnHidden
     >
       <Form<Values>
         form={form}

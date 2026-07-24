@@ -65,11 +65,7 @@ class ScanResultRepository:
 
     async def list_for_git_sha(self, git_sha: str) -> Sequence[ScanResult]:
         """列出某提交的全部扫描结果(各 scanner 一条),供门禁与链路追溯。"""
-        stmt = (
-            select(ScanResult)
-            .where(ScanResult.git_sha == git_sha)
-            .order_by(ScanResult.scanner)
-        )
+        stmt = select(ScanResult).where(ScanResult.git_sha == git_sha).order_by(ScanResult.scanner)
         return (await self._session.execute(stmt)).scalars().all()
 
     async def has_critical(self, git_sha: str) -> bool:

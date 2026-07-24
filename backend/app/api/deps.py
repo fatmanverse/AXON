@@ -6,7 +6,8 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings
+from app.core.config import get_settings as get_default_settings
 from app.core.db import Database
 from app.core.errors import AppError
 from app.core.permissions import Permission
@@ -16,6 +17,11 @@ from app.services.auth_service import AuthService
 
 # auto_error=False:自己抛统一 envelope 的 401,而非 FastAPI 默认体
 _bearer = HTTPBearer(auto_error=False)
+
+
+def get_settings(request: Request) -> Settings:
+    """Resolve the settings owned by the current app instance."""
+    return getattr(request.app.state, "settings", None) or get_default_settings()
 
 
 def get_database(request: Request) -> Database:
@@ -90,7 +96,9 @@ def get_rollout_provider(request: Request):
         request.app.state.secret_store,
         request.app.state.settings,
         k8s_api_factory=getattr(request.app.state, "k8s_api_factory", None),
+        argo_api_factory=getattr(request.app.state, "k8s_custom_objects_api_factory", None),
         connector=getattr(request.app.state, "ssh_connector", None),
+        agent_registry=getattr(request.app.state, "agent_gateway_registry", None),
     )
 
 
@@ -136,6 +144,8 @@ async def get_current_user(
     user = await AuthService(session, settings).get_by_username(claims.subject)
     if user is None or not user.is_active:
         raise AppError("unauthorized", "用户不存在或已停用", status_code=401)
+    if claims.token_version != user.token_version:
+        raise AppError("unauthorized", "认证凭证已撤销", status_code=401)
     return user
 
 

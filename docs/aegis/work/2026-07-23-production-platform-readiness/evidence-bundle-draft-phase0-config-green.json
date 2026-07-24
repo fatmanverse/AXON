@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "phase0-config-green",
+  "type": "command",
+  "source": "backend/app/core/config.py, backend/app/main.py, backend/app/cli/seed.py, backend/alembic/env.py",
+  "summary": "Production validation is wired into API, seed and Alembic entrypoints; docs and env contract updated",
+  "verifier": "targeted Ruff/Black passed; 14 backend config/auth/export/health tests passed"
+}
