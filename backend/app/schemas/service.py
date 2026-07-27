@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.models.deployment import DeploymentStrategy
 from app.models.service import ObservedStatus, ReloadMode, Runtime
+from app.schemas.build_config import BuildConfigModel
 
 
 class ServiceCreate(BaseModel):
@@ -19,11 +20,25 @@ class ServiceCreate(BaseModel):
     desired_version: str | None = Field(default=None, max_length=128)
     reload_mode: ReloadMode = ReloadMode.RESTART
     health_check: dict[str, Any] | None = None
-    # 构建默认配置(照 health_check 先例的可空 JSON):承载 repo_url / git_ref /
-    # test_command / build_command / artifact_type(generic|docker)及形态专属字段
-    # (generic 的 output_path、docker 的 image_name/dockerfile/registry_id)。
-    # 触发构建时以此为默认,可被 BuildRequestBody 覆写。
-    build_config: dict[str, Any] | None = None
+    # 构建默认配置:结构化校验(编写即校验),承载 repo_url / build_command /
+    # artifact_type(generic|docker)及形态专属字段(generic 的 output_path、
+    # docker 的 image_ref/dockerfile)。触发构建时 git_ref/version 可被覆写。
+    # 提供即按形态校验必填项;不配则该服务不支持本地构建。
+    build_config: BuildConfigModel | None = None
+
+
+class ServiceUpdate(BaseModel):
+    """服务的部分更新入参(PATCH)。仅提供的字段被更新,未提供的保持原值。
+
+    build_config 用结构化模型:一旦提供就整体替换并按形态校验必填项——避免
+    "只改一半"留下残缺配置。传显式 null 语义由 API 层区分(未提供 vs 置空),
+    这里所有字段默认 None 表示"未提供"。
+    """
+
+    desired_version: str | None = Field(default=None, max_length=128)
+    reload_mode: ReloadMode | None = None
+    health_check: dict[str, Any] | None = None
+    build_config: BuildConfigModel | None = None
 
 
 class PlacementCreate(BaseModel):
@@ -45,6 +60,9 @@ class ServiceOut(BaseModel):
     desired_version: str | None = None
     reload_mode: ReloadMode
     placement_count: int = 0
+    # 构建配置原样透传(dict 而非 BuildConfigModel):历史服务可能存有残缺配置,
+    # 输出侧不做形态校验,以免读取既有数据时报错——校验只在写入(Create/Update)时做。
+    build_config: dict[str, Any] | None = None
 
     model_config = {"from_attributes": True}
 

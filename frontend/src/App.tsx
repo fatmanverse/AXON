@@ -12,6 +12,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { MonitoringPage } from "@/pages/MonitoringPage";
 import { ServersPage } from "@/pages/ServersPage";
 import { ServicesPage } from "@/pages/ServicesPage";
+import { ServiceDetailPage } from "@/pages/ServiceDetailPage";
 import { EnvironmentsPage } from "@/pages/EnvironmentsPage";
 import { DeploymentsPage } from "@/pages/DeploymentsPage";
 import { BuildsPage } from "@/pages/BuildsPage";
@@ -28,6 +29,7 @@ export function App(): React.ReactElement {
           <Route index element={<HomePage />} />
           <Route path="/servers" element={<ServersPage />} />
           <Route path="/services" element={<ServicesPage />} />
+          <Route path="/services/:serviceId" element={<ServiceDetailPage />} />
           <Route path="/environments" element={<EnvironmentsPage />} />
           <Route path="/deployments" element={<DeploymentsPage />} />
           <Route path="/builds" element={<BuildsPage />} />

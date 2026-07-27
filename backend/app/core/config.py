@@ -189,6 +189,23 @@ class Settings(BaseSettings):
     build_step_timeout_sec: float = 1800.0
     build_node_lease_ttl_sec: float = 7200.0
 
+    # 第三方登录(块五:通用 OIDC)。oidc_enabled 关闭时不暴露 SSO 登录端点,保持纯
+    # 本地密码认证(默认)。开启后经标准 OIDC 授权码流(discovery + code + PKCE)对接
+    # 任意兼容 IdP(Keycloak/Auth0/Okta/Google 等):issuer 是 IdP 的 discovery 根,
+    # client_id/secret 是在 IdP 注册的应用凭据,redirect_uri 是本控制面回调地址。
+    # 首次经 OIDC 登录的用户自动建号并赋 oidc_default_role(默认最小只读角色 viewer,
+    # 由管理员事后提权),provider 标识用于多 IdP 并存时区分绑定来源。
+    oidc_enabled: bool = False
+    oidc_provider: str = "oidc"
+    oidc_issuer: str = ""
+    oidc_client_id: str = ""
+    oidc_client_secret: str = ""
+    oidc_redirect_uri: str = ""
+    # 登录成功后前端落地页(callback 302 回此地址并带 token)。
+    oidc_post_login_redirect: str = "/"
+    oidc_scopes: str = "openid profile email"
+    oidc_default_role: str = "viewer"
+
     @property
     def broker_url(self) -> str:
         return self.celery_broker_url or self.redis_url

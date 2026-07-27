@@ -424,6 +424,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Inventory
+         * @description 读取服务器现状:实时 SSH 探测容器 / systemd 服务 / 监听端口 / 资源水位。
+         *
+         *     与 StatusCollector 不同,这是"这台机器上实际跑着什么"的全量发现,不依赖控制面
+         *     是否登记过——供纳管一台已有机器后即刻看清现状。各探测项内部独立降级,单项失败
+         *     (未装 docker、命令缺失、无权限)只把该项标 unavailable,不影响其余项。
+         *     权限沿用 GET 列表:仅需登录(探测命令全为只读,不改目标机状态)。
+         */
+        get: operations["read_inventory_api_servers__server_id__inventory_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/test-connection": {
         parameters: {
             query?: never;
@@ -473,7 +498,15 @@ export interface paths {
         delete: operations["delete_service_api_services__service_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Service
+         * @description 部分更新服务(当前主要承载 build_config 编写)。
+         *
+         *     仅覆盖请求显式提供的字段(exclude_unset);build_config 若提供则已由
+         *     ServiceUpdate 经 BuildConfigModel 结构化校验——填错 key / 缺形态必填项在此
+         *     当场 422,而非拖到构建后台任务才失败。按服务当前 env 校验 write 权限。
+         */
+        patch: operations["update_service_api_services__service_id__patch"];
         trace?: never;
     };
     "/api/services/{service_id}/artifacts": {
@@ -949,6 +982,76 @@ export interface components {
          */
         ArtifactRegistryType: "docker" | "generic";
         /**
+         * BuildConfigModel
+         * @description 服务本地构建的结构化配置。提交即校验,拒绝残缺配置落库。
+         *
+         *     extra="forbid":拒绝未知 key,避免用户拼错字段名(如 image_name)却静默通过、
+         *     到构建时才因缺 image_ref 失败——错误在编写阶段就暴露。
+         */
+        BuildConfigModel: {
+            /**
+             * Artifact Type
+             * @description 制品形态
+             * @default generic
+             * @enum {string}
+             */
+            artifact_type: "generic" | "docker";
+            /**
+             * Build Command
+             * @description 构建命令
+             */
+            build_command: string;
+            /**
+             * Dockerfile
+             * @description Dockerfile 相对路径
+             * @default Dockerfile
+             */
+            dockerfile: string;
+            /**
+             * Git Ref
+             * @description 分支/标签,触发时可覆盖
+             * @default main
+             */
+            git_ref: string;
+            /**
+             * Image Ref
+             * @description docker 镜像坐标
+             */
+            image_ref?: string | null;
+            /**
+             * Output Path
+             * @description generic 产物目录
+             */
+            output_path?: string | null;
+            /**
+             * Registry Id
+             * @description 指定制品库,缺省用默认库
+             */
+            registry_id?: string | null;
+            /**
+             * Repo Url
+             * @description git clone 源地址
+             */
+            repo_url: string;
+            /**
+             * Required Labels
+             * @description 构建节点选择标签
+             */
+            required_labels?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Test Command
+             * @description 构建前测试命令,空则跳过
+             */
+            test_command?: string | null;
+            /**
+             * Version
+             * @description 制品版本标签,触发时可覆盖
+             */
+            version?: string | null;
+        };
+        /**
          * BuildNodeCreate
          * @description 注册本地或 SSH 构建节点；外部节点需提供 host 与凭证引用。
          */
@@ -1137,10 +1240,7 @@ export interface components {
         };
         /** ServiceCreate */
         ServiceCreate: {
-            /** Build Config */
-            build_config?: {
-                [key: string]: unknown;
-            } | null;
+            build_config?: components["schemas"]["BuildConfigModel"] | null;
             /** Desired Version */
             desired_version?: string | null;
             /** Env */
@@ -1158,6 +1258,24 @@ export interface components {
             runtime_ref: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * ServiceUpdate
+         * @description 服务的部分更新入参(PATCH)。仅提供的字段被更新,未提供的保持原值。
+         *
+         *     build_config 用结构化模型:一旦提供就整体替换并按形态校验必填项——避免
+         *     "只改一半"留下残缺配置。传显式 null 语义由 API 层区分(未提供 vs 置空),
+         *     这里所有字段默认 None 表示"未提供"。
+         */
+        ServiceUpdate: {
+            build_config?: components["schemas"]["BuildConfigModel"] | null;
+            /** Desired Version */
+            desired_version?: string | null;
+            /** Health Check */
+            health_check?: {
+                [key: string]: unknown;
+            } | null;
+            reload_mode?: components["schemas"]["ReloadMode"] | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -2036,6 +2154,39 @@ export interface operations {
             };
         };
     };
+    read_inventory_api_servers__server_id__inventory_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     test_connection_api_servers__server_id__test_connection_post: {
         parameters: {
             query?: never;
@@ -2153,6 +2304,43 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_service_api_services__service_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServiceUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -8,6 +8,7 @@
  */
 
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Button,
   Card,
@@ -19,6 +20,7 @@ import {
   Select,
   Skeleton,
   Space,
+  Switch,
   Table,
   Tag,
   message,
@@ -29,17 +31,22 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/api/client";
 import { type Environment, listEnvironments } from "@/api/environments";
 import {
+  type ArtifactType,
+  type BuildConfigInput,
   type CreateServiceRequest,
   type LifecycleAction,
   type ListServicesParams,
   type Runtime,
   type Service,
   type ServiceEnvironment,
+  type UpdateServiceRequest,
   createService,
   listServices,
   runLifecycle,
+  updateService,
 } from "@/api/services";
 import { pollTaskUntilDone } from "@/api/taskPolling";
+import { BuildConfigFields } from "@/components/BuildConfigFields";
 import { DetailModal } from "@/components/DetailModal";
 import { FormModal } from "@/components/FormModal";
 import { TableToolbar, type ColumnToggle } from "@/components/TableToolbar";
@@ -88,12 +95,55 @@ const TOGGLEABLE_COLUMNS: ColumnToggle[] = [
 ];
 const DEFAULT_VISIBLE = TOGGLEABLE_COLUMNS.map((c) => c.key);
 
+// 表单里 build_config 分区的原始值:各字段可空,提交前经 normalizeBuildConfig
+// 归一(去掉全空的可选项、按形态裁剪),对齐后端 BuildConfigInput。
+interface BuildConfigFormValues {
+  repo_url?: string;
+  build_command?: string;
+  artifact_type?: ArtifactType;
+  git_ref?: string;
+  test_command?: string;
+  version?: string;
+  output_path?: string;
+  image_ref?: string;
+  dockerfile?: string;
+}
+
 interface ServiceFormValues {
   name: string;
   env: ServiceEnvironment;
   runtime: Runtime;
   target: string;
   desired_version?: string;
+  enable_build?: boolean;
+  build_config?: BuildConfigFormValues;
+}
+
+/**
+ * 把表单原始 build_config 值归一为后端入参:未填仓库地址视为"不配置构建"返回
+ * undefined;否则按形态只带该形态需要的字段,空串转 undefined 交由后端补默认值。
+ */
+function normalizeBuildConfig(raw?: BuildConfigFormValues): BuildConfigInput | undefined {
+  if (!raw || !raw.repo_url?.trim()) {
+    return undefined;
+  }
+  const artifactType: ArtifactType = raw.artifact_type ?? "generic";
+  const base: BuildConfigInput = {
+    repo_url: raw.repo_url.trim(),
+    build_command: (raw.build_command ?? "").trim(),
+    artifact_type: artifactType,
+    git_ref: raw.git_ref?.trim() || undefined,
+    test_command: raw.test_command?.trim() || undefined,
+    version: raw.version?.trim() || undefined,
+  };
+  if (artifactType === "docker") {
+    return {
+      ...base,
+      image_ref: raw.image_ref?.trim() || undefined,
+      dockerfile: raw.dockerfile?.trim() || undefined,
+    };
+  }
+  return { ...base, output_path: raw.output_path?.trim() || undefined };
 }
 
 function toCreateRequest(values: ServiceFormValues): CreateServiceRequest {
@@ -103,6 +153,7 @@ function toCreateRequest(values: ServiceFormValues): CreateServiceRequest {
     runtime: values.runtime,
     runtime_ref: { [RUNTIME_REF_KEY[values.runtime]]: values.target },
     desired_version: values.desired_version || null,
+    build_config: values.enable_build ? normalizeBuildConfig(values.build_config) : undefined,
   };
 }
 
@@ -157,14 +208,17 @@ function ServiceDetailModal({
 
 export function ServicesPage(): React.ReactElement {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [envFilter, setEnvFilter] = useState<ServiceEnvironment | undefined>();
   const [runtimeFilter, setRuntimeFilter] = useState<Runtime | undefined>();
   const [modalOpen, setModalOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE);
-  const [detailService, setDetailService] = useState<Service | null>(null);
+  // 正在编辑构建配置的服务(null 表示编辑弹窗关闭)。
+  const [buildConfigService, setBuildConfigService] = useState<Service | null>(null);
   const [form] = Form.useForm<ServiceFormValues>();
+  const [buildForm] = Form.useForm<{ build_config?: BuildConfigFormValues }>();
 
   const filters: ListServicesParams = { env: envFilter, runtime: runtimeFilter };
   const { data, isLoading, isFetching, error, refetch } = useQuery({
@@ -196,6 +250,56 @@ export function ServicesPage(): React.ReactElement {
       message.error(err instanceof ApiError ? err.message : "创建失败");
     },
   });
+
+  const updateBuildConfigMutation = useMutation({
+    mutationFn: (vars: { serviceId: string; body: UpdateServiceRequest }) =>
+      updateService(vars.serviceId, vars.body),
+    onSuccess: (service) => {
+      message.success(`已保存 ${service.name} 的构建配置`);
+      setBuildConfigService(null);
+      buildForm.resetFields();
+      void queryClient.invalidateQueries({ queryKey: ["services"] });
+    },
+    onError: (err) => {
+      message.error(err instanceof ApiError ? err.message : "保存构建配置失败");
+    },
+  });
+
+  // 打开构建配置编辑弹窗:用服务现有 build_config 回填(无则留空,artifact_type 默认 generic)。
+  const openBuildConfigEditor = (service: Service): void => {
+    setBuildConfigService(service);
+    const cfg = service.build_config;
+    buildForm.setFieldsValue({
+      build_config: cfg
+        ? {
+            repo_url: cfg.repo_url,
+            build_command: cfg.build_command,
+            artifact_type: cfg.artifact_type,
+            git_ref: cfg.git_ref,
+            test_command: cfg.test_command ?? undefined,
+            version: cfg.version ?? undefined,
+            output_path: cfg.output_path ?? undefined,
+            image_ref: cfg.image_ref ?? undefined,
+            dockerfile: cfg.dockerfile,
+          }
+        : { artifact_type: "generic" },
+    });
+  };
+
+  const handleSaveBuildConfig = (values: { build_config?: BuildConfigFormValues }): void => {
+    if (!buildConfigService) {
+      return;
+    }
+    const normalized = normalizeBuildConfig(values.build_config);
+    if (!normalized) {
+      message.warning("请至少填写代码仓库地址");
+      return;
+    }
+    updateBuildConfigMutation.mutate({
+      serviceId: buildConfigService.id,
+      body: { build_config: normalized },
+    });
+  };
 
   const handleAction = async (service: Service, action: LifecycleAction): Promise<void> => {
     const label = ACTION_LABEL[action];
@@ -233,7 +337,7 @@ export function ServicesPage(): React.ReactElement {
           type="link"
           size="small"
           style={{ padding: 0 }}
-          onClick={() => setDetailService(row)}
+          onClick={() => navigate(`/services/${row.id}`)}
         >
           {name}
         </Button>
@@ -268,7 +372,7 @@ export function ServicesPage(): React.ReactElement {
     {
       title: "操作",
       key: "actions",
-      width: 260,
+      width: 320,
       render: (_, row) => {
         const busy = busyId === row.id;
         return (
@@ -296,6 +400,9 @@ export function ServicesPage(): React.ReactElement {
               onClick={() => void handleAction(row, "restart")}
             >
               重启
+            </Button>
+            <Button size="small" type="link" onClick={() => openBuildConfigEditor(row)}>
+              编辑构建
             </Button>
             <Popconfirm
               title="确认删除该服务?"
@@ -438,13 +545,35 @@ export function ServicesPage(): React.ReactElement {
         <Form.Item name="desired_version" label="期望版本(可选)">
           <Input placeholder="如 v1.2.0" />
         </Form.Item>
+
+        <Form.Item
+          name="enable_build"
+          label="配置本地构建"
+          valuePropName="checked"
+          extra="开启后由控制面 clone→测试→build 出制品;不开可稍后在列表「编辑构建」补配。"
+        >
+          <Switch />
+        </Form.Item>
+        <Form.Item noStyle shouldUpdate={(prev, cur) => prev.enable_build !== cur.enable_build}>
+          {({ getFieldValue }) =>
+            getFieldValue("enable_build") ? <BuildConfigFields form={form} /> : null
+          }
+        </Form.Item>
       </FormModal>
 
-      <ServiceDetailModal
-        service={detailService}
-        envColor={envTagColor(detailService ? envByName.get(detailService.env) : undefined)}
-        onClose={() => setDetailService(null)}
-      />
+      <FormModal<{ build_config?: BuildConfigFormValues }>
+        title={
+          buildConfigService ? `编辑构建配置 · ${buildConfigService.name}` : "编辑构建配置"
+        }
+        open={buildConfigService !== null}
+        form={buildForm}
+        onFinish={handleSaveBuildConfig}
+        onClose={() => setBuildConfigService(null)}
+        confirmLoading={updateBuildConfigMutation.isPending}
+        okText="保存"
+      >
+        <BuildConfigFields form={buildForm} />
+      </FormModal>
     </div>
   );
 }

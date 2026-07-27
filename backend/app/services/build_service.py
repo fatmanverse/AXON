@@ -120,8 +120,14 @@ class BuildService:
                 from app.services.server_repository import ServerRepository
 
                 remote_server = await ServerRepository(session).get(node.server_id)
-            # 构建启动时 git_ref 可能是分支名,构建记录里携带的 ref 优先(触发时可覆盖)。
-            git_ref = self._resolve(build_config, "git_ref", default="main")
+            # git_ref 优先取构建记录里已落的值(触发时 BuildRequestBody.git_ref 覆写写入
+            # 此列),缺失才回退 build_config 默认再回退 main——这样 UI 触发时填的 ref
+            # 才真正传到 clone(此前恒从 config 读,body 覆写在链路里被丢弃)。
+            build_record = await BuildRepository(session).get(build_id)
+            git_ref = build_record.git_ref or self._resolve(
+                build_config, "git_ref", default="main"
+            )
+            build_version = build_record.version
 
         workspace = Path(self._settings.build_workspace_dir) / build_id
         executor = self._build_executor(node, remote_server, workspace)
@@ -154,6 +160,7 @@ class BuildService:
                 build_config=build_config,
                 outcome=outcome,
                 node_id=node_id,
+                version=build_version,
             )
         finally:
             if not (node.labels or {}).get("local"):
@@ -236,8 +243,13 @@ class BuildService:
         build_config: dict,
         outcome: BuildOutcome,
         node_id: str,
+        version: str | None = None,
     ) -> None:
-        """落制品记录并回填 build.git_sha / build.artifact_id / build.build_node_id。"""
+        """落制品记录并回填 build.git_sha / build.artifact_id / build.build_node_id。
+
+        version 优先取构建记录里已落的值(触发时 BuildRequestBody.version 覆写写入),
+        缺失才回退 build_config 默认——与 git_ref 同款覆写贯通,避免 body 覆写被丢弃。
+        """
         artifact_type = str(build_config.get("artifact_type", "generic"))
         async with self._db.session() as session:
             artifact_repo = ArtifactRepository(session)
@@ -257,7 +269,7 @@ class BuildService:
                 build_id=build_id,
                 git_sha=outcome.git_sha,
                 name=service_name,
-                version=build_config.get("version"),
+                version=version or build_config.get("version"),
                 uri=outcome.artifact_uri,
                 digest=outcome.digest,
                 size_bytes=outcome.size_bytes,

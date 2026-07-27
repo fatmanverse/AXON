@@ -20,6 +20,7 @@ from app.models.service import Service, ServicePlacement
 from app.models.service_config import ServiceConfig
 from app.models.task import Task
 from app.models.user import Role, RolePermission, User, user_roles
+from app.models.user_identity import UserIdentity
 
 __all__ = [
     "Base",
@@ -28,6 +29,7 @@ __all__ = [
     "Role",
     "RolePermission",
     "user_roles",
+    "UserIdentity",
     "AuditLog",
     "Server",
     "Service",

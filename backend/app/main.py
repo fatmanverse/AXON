@@ -17,6 +17,7 @@ from app.api import (
     environments,
     health,
     metrics,
+    oidc,
     servers,
     services,
     tasks,
@@ -223,6 +224,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(dist.router)
     app.include_router(auth.router)
+    app.include_router(oidc.router)
     app.include_router(environments.router)
     app.include_router(servers.router)
     app.include_router(services.router)

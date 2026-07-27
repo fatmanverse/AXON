@@ -44,6 +44,7 @@ const SVC: Service = {
   desired_version: "v1.2.0",
   reload_mode: "restart",
   placement_count: 2,
+  build_config: null,
 };
 
 // 环境列表:服务页从 /api/environments 拉取(与服务器纳管同源),供筛选/新建下拉

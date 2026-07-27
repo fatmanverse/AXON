@@ -45,6 +45,7 @@ from app.schemas.service import (
     RollbackRequestBody,
     ServiceCreate,
     ServiceOut,
+    ServiceUpdate,
 )
 from app.schemas.service_config import (
     ConfigDeliveryOut,
@@ -127,6 +128,21 @@ async def list_services(
     return ok([_service_out(s) for s in services])
 
 
+@router.get("/{service_id}")
+async def get_service(
+    service_id: str,
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(get_current_user),
+) -> dict:
+    """单查一个服务(供服务详情页作为动线主轴独立刷新)。
+
+    预加载 placements 供视图读放置计数;含 build_config 供详情页回显构建配置。
+    服务不存在抛 404。仅需登录,不做细粒度鉴权(读操作)。
+    """
+    service = await ServiceRepository(session).get_service_with_placements(service_id)
+    return ok(_service_out(service))
+
+
 @router.post("", status_code=201)
 async def create_service(
     body: ServiceCreate,
@@ -161,6 +177,38 @@ async def create_service(
     # 新建服务尚无 placement,计数为 0;避免触发未加载关系的惰性访问
     view = ServiceOut.model_validate(service).model_copy(update={"placement_count": 0})
     return ok(view.model_dump())
+
+
+@router.patch("/{service_id}")
+async def update_service(
+    service_id: str,
+    body: ServiceUpdate,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """部分更新服务(当前主要承载 build_config 编写)。
+
+    仅覆盖请求显式提供的字段(exclude_unset);build_config 若提供则已由
+    ServiceUpdate 经 BuildConfigModel 结构化校验——填错 key / 缺形态必填项在此
+    当场 422,而非拖到构建后台任务才失败。按服务当前 env 校验 write 权限。
+    """
+    repo = ServiceRepository(session)
+    service = await repo.get_service(service_id)  # 404 if missing
+    _require_write_permission(user, service.env)
+
+    updated = await repo.update_service(service_id, body)
+    await AuditService(session).record(
+        actor=user.username,
+        action="service.update",
+        target=f"service:{service_id}",
+        env=updated.env,
+        result=AuditResult.SUCCESS,
+        after={"fields": sorted(body.model_dump(exclude_unset=True).keys())},
+        ip=request.client.host if request.client else None,
+        ua=request.headers.get("user-agent"),
+    )
+    return ok(_service_out(updated))
 
 
 async def _accept_action(

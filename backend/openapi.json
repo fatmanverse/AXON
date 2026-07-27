@@ -89,6 +89,127 @@
         "title": "ArtifactRegistryType",
         "type": "string"
       },
+      "BuildConfigModel": {
+        "additionalProperties": false,
+        "description": "服务本地构建的结构化配置。提交即校验,拒绝残缺配置落库。\n\nextra=\"forbid\":拒绝未知 key,避免用户拼错字段名(如 image_name)却静默通过、\n到构建时才因缺 image_ref 失败——错误在编写阶段就暴露。",
+        "properties": {
+          "artifact_type": {
+            "default": "generic",
+            "description": "制品形态",
+            "enum": [
+              "generic",
+              "docker"
+            ],
+            "title": "Artifact Type",
+            "type": "string"
+          },
+          "build_command": {
+            "description": "构建命令",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Build Command",
+            "type": "string"
+          },
+          "dockerfile": {
+            "default": "Dockerfile",
+            "description": "Dockerfile 相对路径",
+            "maxLength": 512,
+            "title": "Dockerfile",
+            "type": "string"
+          },
+          "git_ref": {
+            "default": "main",
+            "description": "分支/标签,触发时可覆盖",
+            "maxLength": 255,
+            "title": "Git Ref",
+            "type": "string"
+          },
+          "image_ref": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "docker 镜像坐标",
+            "title": "Image Ref"
+          },
+          "output_path": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "generic 产物目录",
+            "title": "Output Path"
+          },
+          "registry_id": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "指定制品库,缺省用默认库",
+            "title": "Registry Id"
+          },
+          "repo_url": {
+            "description": "git clone 源地址",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Repo Url",
+            "type": "string"
+          },
+          "required_labels": {
+            "additionalProperties": true,
+            "description": "构建节点选择标签",
+            "title": "Required Labels",
+            "type": "object"
+          },
+          "test_command": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "构建前测试命令,空则跳过",
+            "title": "Test Command"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "制品版本标签,触发时可覆盖",
+            "title": "Version"
+          }
+        },
+        "required": [
+          "repo_url",
+          "build_command"
+        ],
+        "title": "BuildConfigModel",
+        "type": "object"
+      },
       "BuildNodeCreate": {
         "description": "注册本地或 SSH 构建节点；外部节点需提供 host 与凭证引用。",
         "properties": {
@@ -541,14 +662,12 @@
           "build_config": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/BuildConfigModel"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Build Config"
+            ]
           },
           "desired_version": {
             "anyOf": [
@@ -607,6 +726,57 @@
           "runtime_ref"
         ],
         "title": "ServiceCreate",
+        "type": "object"
+      },
+      "ServiceUpdate": {
+        "description": "服务的部分更新入参(PATCH)。仅提供的字段被更新,未提供的保持原值。\n\nbuild_config 用结构化模型:一旦提供就整体替换并按形态校验必填项——避免\n\"只改一半\"留下残缺配置。传显式 null 语义由 API 层区分(未提供 vs 置空),\n这里所有字段默认 None 表示\"未提供\"。",
+        "properties": {
+          "build_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BuildConfigModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "desired_version": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desired Version"
+          },
+          "health_check": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Check"
+          },
+          "reload_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReloadMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "ServiceUpdate",
         "type": "object"
       },
       "ValidationError": {
@@ -1957,6 +2127,56 @@
         ]
       }
     },
+    "/api/servers/{server_id}/inventory": {
+      "get": {
+        "description": "读取服务器现状:实时 SSH 探测容器 / systemd 服务 / 监听端口 / 资源水位。\n\n与 StatusCollector 不同,这是\"这台机器上实际跑着什么\"的全量发现,不依赖控制面\n是否登记过——供纳管一台已有机器后即刻看清现状。各探测项内部独立降级,单项失败\n(未装 docker、命令缺失、无权限)只把该项标 unavailable,不影响其余项。\n权限沿用 GET 列表:仅需登录(探测命令全为只读,不改目标机状态)。",
+        "operationId": "read_inventory_api_servers__server_id__inventory_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Read Inventory Api Servers  Server Id  Inventory Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read Inventory",
+        "tags": [
+          "servers"
+        ]
+      }
+    },
     "/api/servers/{server_id}/test-connection": {
       "post": {
         "operationId": "test_connection_api_servers__server_id__test_connection_post",
@@ -2172,6 +2392,64 @@
           }
         ],
         "summary": "Delete Service",
+        "tags": [
+          "services"
+        ]
+      },
+      "patch": {
+        "description": "部分更新服务(当前主要承载 build_config 编写)。\n\n仅覆盖请求显式提供的字段(exclude_unset);build_config 若提供则已由\nServiceUpdate 经 BuildConfigModel 结构化校验——填错 key / 缺形态必填项在此\n当场 422,而非拖到构建后台任务才失败。按服务当前 env 校验 write 权限。",
+        "operationId": "update_service_api_services__service_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Service Api Services  Service Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Service",
         "tags": [
           "services"
         ]

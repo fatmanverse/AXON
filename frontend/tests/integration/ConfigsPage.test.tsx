@@ -45,6 +45,7 @@ const SVC: Service = {
   desired_version: null,
   reload_mode: "restart",
   placement_count: 1,
+  build_config: null,
 };
 
 const CFG_V2: ConfigVersion = {

@@ -147,3 +147,34 @@ async def test_list_requires_auth(app_client):
     client, _, _ = app_client
     resp = await client.get("/api/services")
     assert resp.status_code == 401
+
+
+async def test_get_single_service_returns_detail(app_client):
+    client, _, _ = app_client
+    token = await _token(client, "operator", "op-pw")
+    created = await client.post(
+        "/api/services", headers=_auth(token), json=_service_body("detail-svc")
+    )
+    service_id = created.json()["data"]["id"]
+
+    resp = await client.get(f"/api/services/{service_id}", headers=_auth(token))
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["id"] == service_id
+    assert data["name"] == "detail-svc"
+    assert data["placement_count"] == 0
+    # 未配构建时 build_config 为 null(详情页据此判断是否展示"编辑构建")
+    assert data["build_config"] is None
+
+
+async def test_get_single_service_unknown_404(app_client):
+    client, _, _ = app_client
+    token = await _token(client, "operator", "op-pw")
+    resp = await client.get("/api/services/nonexistent", headers=_auth(token))
+    assert resp.status_code == 404
+
+
+async def test_get_single_service_requires_auth(app_client):
+    client, _, _ = app_client
+    resp = await client.get("/api/services/whatever")
+    assert resp.status_code == 401

@@ -15,6 +15,7 @@ interface AuthState {
   user: MeResult | null;
   status: "idle" | "loading" | "authenticated" | "anonymous";
   login: (username: string, password: string) => Promise<void>;
+  setSessionToken: (token: string) => Promise<void>;
   logout: () => void;
   restore: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
@@ -29,6 +30,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const result = await loginRequest(username, password);
       setToken(result.access_token);
+      const me = await fetchMe();
+      set({ user: me, status: "authenticated" });
+    } catch (error) {
+      setToken(null);
+      set({ user: null, status: "anonymous" });
+      throw error;
+    }
+  },
+
+  setSessionToken: async (token) => {
+    setToken(token);
+    set({ status: "loading" });
+    try {
       const me = await fetchMe();
       set({ user: me, status: "authenticated" });
     } catch (error) {

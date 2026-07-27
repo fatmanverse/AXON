@@ -16,6 +16,41 @@ export type LifecycleAction = "start" | "stop" | "restart" | "delete";
 
 export type TaskStatus = "pending" | "running" | "success" | "failed" | "unknown";
 
+export type ArtifactType = "generic" | "docker";
+// 供页面表单直接引用(避免各处重复字面量联合)。
+
+/**
+ * 服务本地构建配置。对齐后端 BuildConfigModel:按 artifact_type 分形态,
+ * generic 需 output_path、docker 需 image_ref。填错 key / 缺形态必填项在
+ * 后端提交时(PATCH/POST)当场 422,不再拖到构建后台任务才失败。
+ */
+export interface BuildConfig {
+  repo_url: string;
+  build_command: string;
+  artifact_type: ArtifactType;
+  git_ref: string;
+  test_command: string | null;
+  version: string | null;
+  registry_id: string | null;
+  required_labels: Record<string, unknown>;
+  output_path: string | null;
+  image_ref: string | null;
+  dockerfile: string;
+}
+
+/** 编写构建配置的入参:默认值(git_ref/dockerfile 等)由后端补齐,前端只需填核心项。 */
+export interface BuildConfigInput {
+  repo_url: string;
+  build_command: string;
+  artifact_type: ArtifactType;
+  git_ref?: string;
+  test_command?: string | null;
+  version?: string | null;
+  output_path?: string | null;
+  image_ref?: string | null;
+  dockerfile?: string;
+}
+
 export interface Service {
   id: string;
   name: string;
@@ -25,6 +60,7 @@ export interface Service {
   desired_version: string | null;
   reload_mode: ReloadMode;
   placement_count: number;
+  build_config: BuildConfig | null;
 }
 
 export interface CreateServiceRequest {
@@ -33,6 +69,13 @@ export interface CreateServiceRequest {
   runtime: Runtime;
   runtime_ref: Record<string, unknown>;
   desired_version?: string | null;
+  build_config?: BuildConfigInput | null;
+}
+
+/** 部分更新服务(PATCH):仅提供的字段被更新;build_config 一旦提供整体替换并按形态校验。 */
+export interface UpdateServiceRequest {
+  desired_version?: string | null;
+  build_config?: BuildConfigInput | null;
 }
 
 export interface TaskAccepted {
@@ -62,6 +105,16 @@ export function listServices(params?: ListServicesParams): Promise<Service[]> {
 
 export function createService(body: CreateServiceRequest): Promise<Service> {
   return api.post<Service>("/api/services", body);
+}
+
+/** 单个服务详情(服务详情页动线主轴):含 placement 计数与 build_config。 */
+export function getService(serviceId: string): Promise<Service> {
+  return api.get<Service>(`/api/services/${serviceId}`);
+}
+
+/** 部分更新服务(PATCH),当前主要承载构建配置编写;build_config 提供即后端校验。 */
+export function updateService(serviceId: string, body: UpdateServiceRequest): Promise<Service> {
+  return api.patch<Service>(`/api/services/${serviceId}`, body);
 }
 
 /** start/stop/restart 走 POST /{id}/{action};delete 走 DELETE /{id}。 */

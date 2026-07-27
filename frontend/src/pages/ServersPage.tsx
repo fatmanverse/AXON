@@ -46,6 +46,7 @@ import { AGENT_STATUS } from "@/constants/status";
 import { FormModal } from "@/components/FormModal";
 import { Muted } from "@/components/Muted";
 import { PageHeader } from "@/components/PageHeader";
+import { ServerInventoryDrawer } from "@/components/ServerInventoryDrawer";
 import { colors, shadows } from "@/theme";
 
 interface ServerFormValues {
@@ -94,6 +95,7 @@ export function ServersPage(): React.ReactElement {
   const [authType, setAuthType] = useState<SshAuthType>("key");
   const [testingId, setTestingId] = useState<string | null>(null);
   const [installingId, setInstallingId] = useState<string | null>(null);
+  const [inventoryServer, setInventoryServer] = useState<Server | null>(null);
   const [form] = Form.useForm<ServerFormValues>();
 
   const { data, isLoading, error } = useQuery({
@@ -172,7 +174,18 @@ export function ServersPage(): React.ReactElement {
       title: "名称",
       dataIndex: "name",
       key: "name",
-      render: (name: string) => <span style={{ color: colors.textTitle }}>{name}</span>,
+      render: (name: string, row) =>
+        row.access_mode === "ssh" ? (
+          <Button
+            type="link"
+            style={{ padding: 0, height: "auto", color: colors.primary }}
+            onClick={() => setInventoryServer(row)}
+          >
+            {name}
+          </Button>
+        ) : (
+          <span style={{ color: colors.textTitle }}>{name}</span>
+        ),
     },
     { title: "主机", dataIndex: "host", key: "host" },
     {
@@ -380,6 +393,12 @@ export function ServersPage(): React.ReactElement {
           </Form.Item>
         )}
       </FormModal>
+
+      <ServerInventoryDrawer
+        server={inventoryServer}
+        open={inventoryServer !== null}
+        onClose={() => setInventoryServer(null)}
+      />
     </div>
   );
 }

@@ -14,7 +14,7 @@ from app.models.service import (
     Service,
     ServicePlacement,
 )
-from app.schemas.service import PlacementCreate, ServiceCreate
+from app.schemas.service import PlacementCreate, ServiceCreate, ServiceUpdate
 
 
 class ServiceRepository:
@@ -27,8 +27,51 @@ class ServiceRepository:
         await self._session.flush()
         return service
 
+    async def update_service(self, service_id: str, payload: ServiceUpdate) -> Service:
+        """部分更新服务。仅覆盖请求里显式提供的字段(exclude_unset),
+        避免把未提交的字段误置空——"未提供"与"显式置 null"语义不同,由调用方
+        经 exclude_unset 区分。服务不存在抛 404。
+        """
+        service = await self.get_service(service_id)
+        # 顶层用 exclude_unset 区分"未提供"与"显式置 null";但嵌套的 build_config
+        # 不能一并 exclude_unset——那会剥掉 BuildConfigModel 补齐的默认值(git_ref/
+        # dockerfile 等),把残缺配置写进库。故 build_config 单独整体 dump(含默认值)。
+        provided = payload.model_dump(exclude_unset=True)
+        for key in provided:
+            value = getattr(payload, key)
+            if key == "build_config" and value is not None:
+                value = value.model_dump()
+            setattr(service, key, value)
+        await self._session.flush()
+        # 预加载 placements 再返回:视图层 _service_out 会读 placement 计数,
+        # 惰性访问会在请求的异步上下文外触发 IO(MissingGreenlet)。
+        stmt = (
+            select(Service)
+            .options(selectinload(Service.placements))
+            .where(Service.id == service_id)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one()
+
     async def get_service(self, service_id: str) -> Service:
         service = await self._session.get(Service, service_id)
+        if service is None:
+            raise AppError("service_not_found", "服务不存在", status_code=404)
+        return service
+
+    async def get_service_with_placements(self, service_id: str) -> Service:
+        """按 id 取服务并预加载 placements(供详情视图读 placement 计数)。
+
+        惰性访问 placements 会在请求异步上下文外触发 IO(MissingGreenlet),故
+        单查详情统一走 selectinload 预加载。服务不存在抛 404。
+        """
+        stmt = (
+            select(Service)
+            .options(selectinload(Service.placements))
+            .where(Service.id == service_id)
+        )
+        result = await self._session.execute(stmt)
+        service = result.scalar_one_or_none()
         if service is None:
             raise AppError("service_not_found", "服务不存在", status_code=404)
         return service

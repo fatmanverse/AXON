@@ -93,3 +93,61 @@ class ServerOut(BaseModel):
     labels: dict[str, Any]
 
     model_config = {"from_attributes": True}
+
+
+# ── 服务器现状(inventory)响应视图 ────────────────────────────────────────────
+# 承载"这台机器上实际跑着什么"的探测结果。各分区独立可用性(available/error),
+# 探测不到的项 available=False,不拖累其余项——对齐 adapters/server_inventory 的降级语义。
+
+
+class InventorySectionOut(BaseModel):
+    """一个探测项的可用性:available=False 时该项 items 为空、error 说明原因。"""
+
+    available: bool
+    error: str | None = None
+
+
+class ContainerOut(BaseModel):
+    name: str
+    image: str
+    status: str
+    state: str
+    ports: str
+
+
+class SystemdServiceOut(BaseModel):
+    unit: str
+    active: str
+    sub: str
+    description: str
+
+
+class ListenPortOut(BaseModel):
+    protocol: str
+    address: str
+    port: str
+    process: str
+
+
+class ResourceSnapshotOut(BaseModel):
+    mem_total_mb: int | None = None
+    mem_used_mb: int | None = None
+    disk_total_kb: int | None = None
+    disk_used_kb: int | None = None
+    disk_mount: str | None = None
+    load1: float | None = None
+    load5: float | None = None
+    load15: float | None = None
+
+
+class ServerInventoryOut(BaseModel):
+    """一台服务器的现状快照:容器 / systemd 服务 / 监听端口 / 资源水位。"""
+
+    containers: list[ContainerOut]
+    containers_section: InventorySectionOut
+    services: list[SystemdServiceOut]
+    services_section: InventorySectionOut
+    ports: list[ListenPortOut]
+    ports_section: InventorySectionOut
+    resource: ResourceSnapshotOut | None = None
+    resource_section: InventorySectionOut

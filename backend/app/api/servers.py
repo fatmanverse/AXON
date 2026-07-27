@@ -13,6 +13,7 @@ from __future__ import annotations
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.server_inventory import ServerInventory
 from app.adapters.ssh_executor import SSHExecutor
 from app.api.deps import (
     get_current_user,
@@ -33,7 +34,12 @@ from app.models.audit import AuditResult
 from app.models.server import AccessMode, Server
 from app.models.task import TaskType
 from app.models.user import User
-from app.schemas.server import ServerCreate, ServerOut, ServerRegisterRequest
+from app.schemas.server import (
+    ServerCreate,
+    ServerInventoryOut,
+    ServerOut,
+    ServerRegisterRequest,
+)
 from app.schemas.task import TaskAccepted
 from app.services.agent_delivery_service import AgentDeliveryService
 from app.services.audit_service import AuditService
@@ -41,6 +47,7 @@ from app.services.environment_repository import EnvironmentRepository
 from app.services.executor_factory import build_executor_for_server
 from app.services.monitoring_bootstrap import MonitoringBootstrapService
 from app.services.prometheus_targets import PrometheusTargetRegistry
+from app.services.server_inventory_service import ServerInventoryService
 from app.services.server_repository import ServerRepository
 from app.services.task_repository import TaskRepository
 
@@ -257,3 +264,38 @@ async def install_agent(
 
     accepted = TaskAccepted(task_id=task_id, status=task.status)
     return ok(accepted.model_dump())
+
+
+def _inventory_out(inventory: ServerInventory) -> dict:
+    """把探测结果映射为响应视图。dataclass → pydantic,分区可用性原样透传。"""
+    return ServerInventoryOut(
+        containers=[c.__dict__ for c in inventory.containers],
+        containers_section=inventory.containers_section.__dict__,
+        services=[s.__dict__ for s in inventory.services],
+        services_section=inventory.services_section.__dict__,
+        ports=[p.__dict__ for p in inventory.ports],
+        ports_section=inventory.ports_section.__dict__,
+        resource=inventory.resource.__dict__ if inventory.resource else None,
+        resource_section=inventory.resource_section.__dict__,
+    ).model_dump()
+
+
+@router.get("/{server_id}/inventory")
+async def read_inventory(
+    server_id: str,
+    session: AsyncSession = Depends(get_session),
+    secrets: SecretStore = Depends(get_secret_store),
+    db: Database = Depends(get_database),
+    connector=Depends(get_ssh_connector),
+    _: User = Depends(get_current_user),
+) -> dict:
+    """读取服务器现状:实时 SSH 探测容器 / systemd 服务 / 监听端口 / 资源水位。
+
+    与 StatusCollector 不同,这是"这台机器上实际跑着什么"的全量发现,不依赖控制面
+    是否登记过——供纳管一台已有机器后即刻看清现状。各探测项内部独立降级,单项失败
+    (未装 docker、命令缺失、无权限)只把该项标 unavailable,不影响其余项。
+    权限沿用 GET 列表:仅需登录(探测命令全为只读,不改目标机状态)。
+    """
+    service = ServerInventoryService(db, secrets, connector=connector)
+    inventory = await service.read(server_id)
+    return ok(_inventory_out(inventory))
